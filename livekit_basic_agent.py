@@ -20,15 +20,46 @@ load_dotenv(".env")
 class Assistant(Agent):
     """Basic private tutor agent for chapter content in Arabic."""
 
-    def __init__(self):
+    def __init__(self, job_ctx: agents.JobContext):
         super().__init__(
-            instructions="""You are a private tutor that helps students understand course material better.
-            Provide clear and concise explanations, summaries, and practice questions based on the content provided.
-            Responses must be in arabic. Give a very short answer in one or two sentences for the follow up questions only.
-            The first response should be a through walk through of the main concept of the chapter."""
+            instructions="""
+              # ROLE
+              You are a highly interactive Private AI Tutor. You guide students through complex material 
+              by combining verbal explanations with visual synchronization. All of your responses must be in Arabic.
+              You are patient, clear, and engaging, ensuring students grasp difficult concepts.
+
+              # YOUR TOOLKIT & WHEN TO USE THEM
+
+              1. `explain_chapter_overview`
+                - USE: When a student says "What are we learning today?", "Give me a summary," or at the start of a session.
+                - PURPOSE: Sets the stage and provides the "Big Picture" before diving into details.
+
+              2. `search_chapter_content(query: str)`
+                - USE: When a student asks a specific technical question (e.g., "What is the formula for NPV?") or mentions a concept you don't have in your immediate memory.
+                - PURPOSE: Retrieves precise facts from the textbook to ensure your explanation is 100% accurate.
+
+              3. `scroll_to_page(page_number: int)`
+                - USE: Every time you change the topic or refer to a specific diagram/table.
+                - PURPOSE: Keeps the student's screen locked to what you are talking about.
+
+              # BEHAVIORAL CHAINING (Crucial)
+              You should often "chain" these tools together. 
+              - EXAMPLE: If a student asks about "IRR", you should:
+                  1. Call `search_chapter_content(query="IRR")` to get the facts.
+                  2. Call `scroll_to_page` to the relevant page found in that search.
+                  3. Explain the concept verbally.
+
+              # TONE & STYLE
+              - Voice-first: Keep sentences short and easy to follow.
+              - Proactive: Don't wait for the student to ask to scroll; lead the way.
+              - Confirming: Use phrases like "As you can see on the screen..." or "Let's look at the overview together."
+            """
         )
 
-        # Mock Airbnb database
+        # Store the job context
+        self.job_ctx = job_ctx
+
+        # Mock Chapter Content Data
         self.chapter_cnt = {
   "chapter_metadata": {
     "chapter_number": 20,
@@ -258,10 +289,12 @@ class Assistant(Agent):
         return explanation
 
     @function_tool(description="Scrolls the user's screen to a specific page number.")
-    async def scroll_to_page(
-        ctx: agents.JobContext, 
-        page_number: int
-    ):
+    async def scroll_to_page(self, page_number: int) -> str:
+        """Scrolls the user's screen to a specific page number.
+        
+        Args:
+            page_number: The page number to scroll to (1-36)
+        """
         # Create the command payload
         payload = json.dumps({
             "action": "scroll",
@@ -269,12 +302,12 @@ class Assistant(Agent):
         })
         
         # Publish the data to everyone in the room (the frontend)
-        await ctx.room.local_participant.publish_data(
+        await self.job_ctx.room.local_participant.publish_data(
             payload,
             reliable=True,
             topic="ui-control"
         )
-        return f"سانتقل إلى الصفحة {page_number}."   
+        return f"سانتقل إلى الصفحة {page_number}."  
 
 
 ## Entrypoint for the agent
@@ -297,7 +330,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Start the session
     await session.start(
         room=ctx.room,
-        agent=Assistant()
+        agent=Assistant(ctx)
     )
 
     # Generate initial greeting
