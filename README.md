@@ -36,10 +36,12 @@ cp .env.example .env
 ```
 
 **Required variables:**
+
 - `OPENAI_API_KEY` - OpenAI API key
 - `DEEPGRAM_API_KEY` - Deepgram API key
 
 **Optional for LiveKit Cloud deployment:**
+
 - `LIVEKIT_URL` - LiveKit server URL
 - `LIVEKIT_API_KEY` - LiveKit API key
 - `LIVEKIT_API_SECRET` - LiveKit API secret
@@ -93,6 +95,7 @@ uv run python livekit_basic_agent.py start
 ### Basic Agent
 
 **`livekit_basic_agent.py`** - The simplest possible LiveKit voice agent
+
 - Minimal configuration with only essential components
 - Great for learning and testing basic functionality
 - Requires only OpenAI and Deepgram API keys
@@ -101,6 +104,7 @@ uv run python livekit_basic_agent.py start
 ### MCP Agent
 
 **`livekit_mcp_agent.py`** - Full-featured voice agent with:
+
 - Configurable speech-to-text, LLM, and text-to-speech providers
 - MCP server integration for tool calling
 - Multilingual turn detection
@@ -112,21 +116,26 @@ uv run python livekit_basic_agent.py start
 The agent uses a modular voice pipeline with swappable components:
 
 ### Speech-to-Text (STT)
+
 - **Default**: Deepgram Nova-2 (highest accuracy)
 - Alternatives: AssemblyAI, Azure Speech, Whisper
 
 ### Large Language Model (LLM)
+
 - **Default**: OpenAI GPT-4.1-mini (fast, cost-effective)
 - Alternatives: Anthropic Claude, Google Gemini, Groq
 
 ### Text-to-Speech (TTS)
+
 - **Default**: OpenAI Echo voice (natural, versatile)
 - Alternatives: Cartesia (fastest), ElevenLabs (highest quality)
 
 ### Voice Activity Detection (VAD)
+
 - **Default**: Silero VAD (reliable voice detection)
 
 ### Turn Detection
+
 - **Default**: Multilingual Model (natural conversation flow)
 - Alternatives: Semantic model, VAD-based
 
@@ -202,16 +211,19 @@ Sign up at [LiveKit Cloud](https://cloud.livekit.io/)
 Choose the installation method for your platform:
 
 **Windows:**
+
 ```bash
 winget install LiveKit.LiveKitCLI
 ```
 
 **Mac:**
+
 ```bash
 brew install livekit
 ```
 
 **Linux:**
+
 ```bash
 curl -sSL https://get.livekit.io/ | bash
 ```
@@ -261,11 +273,13 @@ To integrate your agent with phone calling systems, see the [LiveKit Telephony d
 ## Performance Optimization
 
 ### Reduce Latency
+
 - Use regional deployments close to users
 - Choose faster providers (Deepgram for STT, Cartesia for TTS)
 - Use streaming where possible
 
 ### Scale Efficiently
+
 - Set appropriate prewarm counts in `livekit.toml` for production
 - Use connection pooling for external API calls
 - Implement caching for frequently accessed data
@@ -275,11 +289,8 @@ To integrate your agent with phone calling systems, see the [LiveKit Telephony d
 Console mode lets you test your agent locally without needing a LiveKit server:
 
 ```bash
-# Test the basic agent
-uv run python livekit_basic_agent.py console
-
-# Test the MCP agent
-uv run python livekit_mcp_agent.py console
+# Run agent in dev mode
+uv run python livekit_basic_agent.py dev
 ```
 
 This will start an interactive console where you can speak to your agent using your microphone and speakers.
@@ -287,35 +298,40 @@ This will start an interactive console where you can speak to your agent using y
 ## Troubleshooting
 
 ### Python Version
+
 Ensure you're using Python 3.9 or later:
+
 ```bash
 python --version
 ```
 
 ### Model Downloads
+
 TTS models may download on first use, which can take time. The Docker image pre-downloads Silero VAD to speed up startup.
 
 ### API Key Issues
+
 - Verify all required API keys are set in `.env`
 - Check that API keys are valid and have sufficient credits
 - Ensure no extra whitespace in environment variable values
 
 ### Audio Issues in Console Mode
+
 - Check microphone/speaker permissions
 - Verify audio devices are correctly configured
 - Try adjusting VAD sensitivity if voice detection is problematic
 
 ## Environment Variables Reference
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENAI_API_KEY` | Yes | OpenAI API key for LLM/TTS |
-| `DEEPGRAM_API_KEY` | Yes | Deepgram API key for STT |
-| `LIVEKIT_URL` | No | LiveKit server URL (for deployment) |
-| `LIVEKIT_API_KEY` | No | LiveKit API key (for deployment) |
-| `LIVEKIT_API_SECRET` | No | LiveKit API secret (for deployment) |
-| `LLM_CHOICE` | No | Model selection (default: gpt-4.1-mini) |
-| `LOG_LEVEL` | No | Logging level (default: INFO) |
+| Variable             | Required | Description                             |
+| -------------------- | -------- | --------------------------------------- |
+| `OPENAI_API_KEY`     | Yes      | OpenAI API key for LLM/TTS              |
+| `DEEPGRAM_API_KEY`   | Yes      | Deepgram API key for STT                |
+| `LIVEKIT_URL`        | No       | LiveKit server URL (for deployment)     |
+| `LIVEKIT_API_KEY`    | No       | LiveKit API key (for deployment)        |
+| `LIVEKIT_API_SECRET` | No       | LiveKit API secret (for deployment)     |
+| `LLM_CHOICE`         | No       | Model selection (default: gpt-4.1-mini) |
+| `LOG_LEVEL`          | No       | Logging level (default: INFO)           |
 
 ## Resources
 

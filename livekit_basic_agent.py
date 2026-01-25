@@ -1,14 +1,7 @@
-"""
-LiveKit Voice Agent - Quick Start
-==================================
-The simplest possible LiveKit voice agent to get you started.
-Requires only OpenAI and Deepgram API keys.
-"""
-
 import json
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession, RunContext
+from livekit.agents import Agent, AgentSession, RunContext, inference
 from livekit.agents.llm import function_tool
 from livekit.plugins import openai, deepgram, silero, elevenlabs
 from datetime import datetime
@@ -322,8 +315,12 @@ async def entrypoint(ctx: agents.JobContext):
     session = AgentSession(
         stt=openai.STT(model="gpt-4o-transcribe", language="ar"),
         llm=openai.LLM(model=os.getenv("LLM_CHOICE", "gpt-4o-mini")),
-        # tts=elevenlabs.TTS(voice_id="K6EjAWq39CfwwPD4jafo"),
-        tts=openai.TTS(voice="alloy", model="tts-1"),
+        tts=inference.TTS(
+        model="elevenlabs/eleven_turbo_v2_5", 
+        voice="pNInz6obpgDQGcFmaJgB", 
+        language="ar"
+        ),
+        # tts=openai.TTS(voice="alloy", model="tts-1"),
         vad=silero.VAD.load(),
     )
 
@@ -335,7 +332,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Generate initial greeting
     await session.generate_reply(
-        instructions="Greet the user warmly and whether they need want you to start explaining the chapter or they have a specific question."
+        instructions="Greet the user warmly and ask whether they want you to start explaining the chapter or they have a specific question."
     )
 
 if __name__ == "__main__":
