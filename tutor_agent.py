@@ -96,12 +96,8 @@ async def entrypoint(ctx: agents.JobContext):
     session = AgentSession(
         stt=openai.STT(model="gpt-4o-transcribe", language="ar"),
         llm=openai.LLM(model=os.getenv("LLM_CHOICE", "gpt-4o-mini")),
-        tts=inference.TTS(
-        model="elevenlabs/eleven_turbo_v2_5", 
-        voice="bIHbv24MWmeRgasZH58o", 
-        language="ar"
-        ),
-        # tts=openai.TTS(voice="alloy", model="tts-1"),
+        # tts="elevenlabs/eleven_turbo_v2_5:bIHbv24MWmeRgasZH58o", 
+        tts=openai.TTS(voice="alloy", model="tts-1"),
         vad=silero.VAD.load(),
     )
 

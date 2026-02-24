@@ -52,26 +52,21 @@ Before first run, download the required model files (Silero VAD, turn detector):
 
 ```bash
 # Download model files for basic agent
-uv run python livekit_basic_agent.py download-files
+uv run python tutor_agent.py download-files
 
-# Download model files for MCP agent
-uv run python livekit_mcp_agent.py download-files
 ```
 
 ### 4. Run the Agent
 
 ```bash
 # Basic agent (minimal configuration)
-uv run python livekit_basic_agent.py console
-
-# MCP agent (with MCP server integration)
-uv run python livekit_mcp_agent.py console
+uv run python tutor_agent.py console
 
 # Development mode (connects to LiveKit - optional)
-uv run python livekit_basic_agent.py dev
+uv run python tutor_agent.py dev
 
 # Production mode
-uv run python livekit_basic_agent.py start
+uv run python tutor_agent.py start
 ```
 
 ## Architecture
@@ -94,7 +89,7 @@ uv run python livekit_basic_agent.py start
 
 ### Basic Agent
 
-**`livekit_basic_agent.py`** - The simplest possible LiveKit voice agent
+**`tutor_agent.py`** - The simplest possible LiveKit voice agent
 
 - Minimal configuration with only essential components
 - Great for learning and testing basic functionality
@@ -103,7 +98,7 @@ uv run python livekit_basic_agent.py start
 
 ### MCP Agent
 
-**`livekit_mcp_agent.py`** - Full-featured voice agent with:
+**`tutor_agent.py`** - Full-featured voice agent with:
 
 - Configurable speech-to-text, LLM, and text-to-speech providers
 - MCP server integration for tool calling
@@ -139,23 +134,6 @@ The agent uses a modular voice pipeline with swappable components:
 - **Default**: Multilingual Model (natural conversation flow)
 - Alternatives: Semantic model, VAD-based
 
-## MCP Server Integration
-
-The agent supports integration with MCP (Model Context Protocol) servers for extending functionality with custom tools.
-
-### Configuring MCP Servers
-
-In `livekit_mcp_agent.py`:
-
-```python
-session = AgentSession(
-    # ... other config ...
-    mcp_servers=[
-        mcp.MCPServerHTTP(url="http://localhost:8089/mcp")
-    ]
-)
-```
-
 ### Adding Custom Tools
 
 You can also add tools directly to your agent using the `@function_tool` decorator:
@@ -169,20 +147,6 @@ class Assistant(Agent):
     async def get_current_time(self, context: RunContext) -> str:
         """Get the current time."""
         return datetime.now().strftime("%I:%M %p")
-```
-
-## Development
-
-### Project Structure
-
-```
-livekit-agent/
-├── livekit_basic_agent.py   # Basic example agent
-├── livekit_mcp_agent.py     # MCP-enabled agent
-├── pyproject.toml           # Dependencies
-├── .env.example             # Environment template
-├── Dockerfile               # Container deployment
-└── README.md
 ```
 
 ### Installing Additional Providers
@@ -266,24 +230,6 @@ lk agent create
 
 Visit the [LiveKit Agents Playground](https://agents-playground.livekit.io/) and sign in with your LiveKit organization to test your agent in the browser.
 
-### 8. Telephony Integration (Optional)
-
-To integrate your agent with phone calling systems, see the [LiveKit Telephony documentation](https://docs.livekit.io/agents/start/telephony/)
-
-## Performance Optimization
-
-### Reduce Latency
-
-- Use regional deployments close to users
-- Choose faster providers (Deepgram for STT, Cartesia for TTS)
-- Use streaming where possible
-
-### Scale Efficiently
-
-- Set appropriate prewarm counts in `livekit.toml` for production
-- Use connection pooling for external API calls
-- Implement caching for frequently accessed data
-
 ## Console Mode Testing
 
 Console mode lets you test your agent locally without needing a LiveKit server:
@@ -320,18 +266,6 @@ TTS models may download on first use, which can take time. The Docker image pre-
 - Check microphone/speaker permissions
 - Verify audio devices are correctly configured
 - Try adjusting VAD sensitivity if voice detection is problematic
-
-## Environment Variables Reference
-
-| Variable             | Required | Description                             |
-| -------------------- | -------- | --------------------------------------- |
-| `OPENAI_API_KEY`     | Yes      | OpenAI API key for LLM/TTS              |
-| `DEEPGRAM_API_KEY`   | Yes      | Deepgram API key for STT                |
-| `LIVEKIT_URL`        | No       | LiveKit server URL (for deployment)     |
-| `LIVEKIT_API_KEY`    | No       | LiveKit API key (for deployment)        |
-| `LIVEKIT_API_SECRET` | No       | LiveKit API secret (for deployment)     |
-| `LLM_CHOICE`         | No       | Model selection (default: gpt-4.1-mini) |
-| `LOG_LEVEL`          | No       | Logging level (default: INFO)           |
 
 ## Resources
 

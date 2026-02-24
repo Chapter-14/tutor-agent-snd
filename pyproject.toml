@@ -1,5 +1,5 @@
 [project]
-name = "livekit-voice-agent"
+name = "tutor-agent-snd"
 version = "0.1.0"
 description = "Voice AI agent built with LiveKit Agents framework"
 readme = "README.md"
