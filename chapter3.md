@@ -1,4 +1,3 @@
-CHAPTER_CONTENT = """
 # Overview
 
 - **Chapter Number:** 3
@@ -643,4 +642,3 @@ There can be conflict in ranking based on IRR and NPV because of the following r
 *   Size of Cash flows.
 *   Timing of cash flows
 *   Difference in Project live
-"""
