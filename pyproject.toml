@@ -12,6 +12,7 @@ dependencies = [
     "livekit-plugins-turn-detector>=1.0.0",
     "python-dotenv>=1.0.0",
     "livekit-plugins-elevenlabs>=1.2.14",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]

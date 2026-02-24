@@ -4,8 +4,8 @@ from livekit import agents
 from livekit.agents import Agent, AgentSession, RunContext, inference
 from livekit.agents.llm import function_tool
 from livekit.plugins import openai, deepgram, silero, elevenlabs
+from bunny import fetch_md_from_bunny
 from datetime import datetime
-from chapter_content import CHAPTER_CONTENT
 import os
 
 # Load environment variables
@@ -14,7 +14,7 @@ load_dotenv(".env")
 class Assistant(Agent):
     """Basic private tutor agent for chapter content in Arabic."""
 
-    def __init__(self, job_ctx: agents.JobContext):
+    def __init__(self, job_ctx: agents.JobContext, chapter_content: str):
         # Store the job context
         self.job_ctx = job_ctx
 
@@ -52,7 +52,7 @@ class Assistant(Agent):
               # CHAPTER CONTENT (Reference Material)
               You have access to the complete chapter content below. Use this information to answer student questions accurately.
 
-              {CHAPTER_CONTENT}
+              {chapter_content}
             """
         )
 
@@ -105,15 +105,20 @@ async def entrypoint(ctx: agents.JobContext):
         vad=silero.VAD.load(),
     )
 
+    #TODO: get the job metadata to determine which chapter content to load, for now we hardcode it to chapter 3
+
+    # Fetch chapter content from Bunny Storage
+    chapter_content = await fetch_md_from_bunny("sanad/ICS202/chapter3.md")
+
     # Start the session
     await session.start(
         room=ctx.room,
-        agent=Assistant(ctx)
+        agent=Assistant(ctx, chapter_content=chapter_content)
     )
 
     # Generate initial greeting with chapter overview
     await session.generate_reply(
-        instructions="Greet the user warmly in Arabic, then immediately provide a brief overview of Chapter 20: Capital Budgeting and its Practices. Mention the main topics covered (Payback Period, NPV, IRR) and ask if they want you to dive deeper into any specific topic or if they have questions."
+        instructions="Greet the user warmly in Arabic, then immediately provide a brief overview of the Chapter. Mention the main topics covered and ask if they want you to dive deeper into any specific topic or if they have questions."
     )
 
 if __name__ == "__main__":
