@@ -5,3 +5,6 @@
 .venv
 .pytest_cache
 __pycache__
+Dockerfile
+docker-compose.yml
+.dockerignore
