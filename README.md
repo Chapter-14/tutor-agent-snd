@@ -215,7 +215,7 @@ This will write your LiveKit credentials to `.env.local`
 Run your agent connected to LiveKit Cloud:
 
 ```bash
-uv run python livekit_basic_agent.py start
+uv run python tutor_agent.py start
 ```
 
 ### 6. Create an Agent in LiveKit Cloud
@@ -236,7 +236,7 @@ Console mode lets you test your agent locally without needing a LiveKit server:
 
 ```bash
 # Run agent in dev mode
-uv run python livekit_basic_agent.py dev
+uv run python tutor_agent.py dev
 ```
 
 This will start an interactive console where you can speak to your agent using your microphone and speakers.
