@@ -163,7 +163,7 @@ async def entrypoint(ctx: agents.JobContext):
     chapter_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/ch_meta_data.md")
     # user_info = await fetch_md_from_bunny(f"users/{user_id}.md")
     user_info = "Abdulrahman Albahrawi, is a second year accounting student at KFUPM. He is passionate about learning and has a keen interest in understanding complex concepts in a simple way. Abdulrahman is an active participant in class and enjoys engaging with interactive learning materials. He values clear explanations and appreciates when tutors provide real-life examples to illustrate difficult topics."
-    instructions = await fetch_md_from_bunny("meta/instructions.md")
+    
     # Langauge code mapping for TTS
     ln_code = {
         "English": "en",
@@ -173,21 +173,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
         stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
-        # llm=openai.LLM(model=os.getenv("LLM_CHOICE", "gpt-4o-mini")),
-        llm=openai.LLM(model=os.getenv("LLM_CHOICE")),
-        # Cartesia TTs
-        # tts=cartesia.TTS(
-        # model="sonic-3",
-        # voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e",
-        # language=ln_code.get(language, "en")
-        # ),
-        # ElevenLabs TTs
-        # tts=elevenlabs.TTS(
-        #     # voice_id="ODq5zmih8GrVes37Dizd",
-        #     voice_id="EXAVITQu4vr4xnSDxMaL", # Abdullah - Arabic voice
-        #     model="eleven_turbo_v2_5",
-        #     language=ln_code.get(language, "en")
-        # ),
+        llm=openai.LLM(model=os.getenv("LLM_CHOICE", "gpt-4o-mini")),
         # OpenAI TTs
         tts=openai.TTS(voice="alloy", model="tts-1"),
         vad=silero.VAD.load(),
