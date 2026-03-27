@@ -10,3 +10,5 @@ docker-compose.yml
 .dockerignore
 .opencode
 AGENTS.md
+contexts/
+contexts

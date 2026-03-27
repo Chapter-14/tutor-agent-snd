@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent, AgentSession, AgentTask
 from livekit.agents.llm import function_tool
-from livekit.plugins import openai, silero
+from livekit.plugins import openai, silero, elevenlabs, cartesia
 
 from bunny import fetch_md_from_bunny
 
@@ -25,13 +25,13 @@ class Assistant(Agent):
         user_info: str,
         course_id: str,
         chapter_id: str,
+        topics_list: str,
         chat_ctx=None,
     ):
         # Store the job context and other params for potential handoff
         self.job_ctx = job_ctx
         self.course_id = course_id
         self.chapter_id = chapter_id
-       
         super().__init__(
             instructions=f"""
             # ROLE
@@ -54,8 +54,8 @@ class Assistant(Agent):
             1. `scroll_to_page(page_number: int)`
             - USE: Every time you change the topic or refer to a specific diagram/table.
             - PURPOSE: Keeps the student's screen locked to what you are talking about.
-            2. `get_explanation_plan()`
-            - USE: Use this to get the explanation plan of the topic the user asked for and start explaining the topic using that plan, Don't use before greeting the user and introdusing your self.
+            2. `get_explanation_plan(topic: str)`
+            - USE: Only after the user explicitly responds with a topic request. Never call this tool before hearing from the user in the current session. After the user responds, map their request to the matching topic slug from the provided chapter topics JSON object, then call this tool with that slug as the `topic` argument.
             - PURPOSE: Provides you with a structured explanation plan to ensure your explanations are clear, comprehensive, and logically organized.
 
             # Guardrails
@@ -63,6 +63,7 @@ class Assistant(Agent):
             - Stay within safe, lawful, and appropriate use; decline harmful or out of scope requests.
             - For medical, legal, or financial topics, provide general information only and suggest consulting a qualified professional.
             - Protect privacy and minimize sensitive data.
+            - Hard rule: Do not call get_explanation_plan until after the user has answered your topic question in this session.
 
             # USER INFO (Use this to personalize your responses)
             {user_info}
@@ -74,6 +75,10 @@ class Assistant(Agent):
             # CHAPTER META INFORMATION
             Use this to understand the structure of the chapter and how to navigate it effectively for the student
             {chapter_meta_data}
+
+            # Chapter topics JSON object. Each topic includes a slug key. Use this list to map the user's natural-language
+            # request to the correct slug, then pass that slug to get_explanation_plan(topic).
+            {topics_list}
             """,
             chat_ctx=chat_ctx,
         )
@@ -96,17 +101,56 @@ class Assistant(Agent):
         return "Continue with your explanation and make sure to refer to the content on the page you just scrolled to in your explanation."
 
     @function_tool(
-        description="Use this tool after you ask the user which topic they want to focus on, then fetches the explanation plan for that topic and starts explaining it using the plan as a guide."
+        description="""Use this tool only after the user has explicitly stated what they want to study in the current session. Never call it before user input. 
+        After user input, map the user's request to the matching topic slug from the provided chapter topics list, then pass that slug as the topic argument to 
+        fetch the explanation plan and start explaining."""
     )
     async def get_explanation_plan(self, topic: str) -> str:
-        """Fetches explanation plan for the specified topic and starts explaining the topic."""
+        """Fetches explanation plan for the specified topic slug and starts explaining the topic."""
 
         # Generate dynamic explanation plan using LangChain
-        plan = await fetch_md_from_bunny(f"sanad/{self.course_id}/{self.chapter_id}/plan.md")
+        # plan = await fetch_md_from_bunny(f"sanad/{self.course_id}/{self.chapter_id}/plan.md")
 
-        await self.update_instructions(plan)
+        # for dev, we will use a static plan
+        with open(f"contexts/output/{topic}.md", "r", encoding="utf-8") as f:
+            plan = f.read()
+        await self.update_instructions(f"""
+        You will receive a plan of how to explain this part of the chapter below, you must follow the following instructions when executing the plan:                               
 
-        return "Start explaining the topic using the provided plan as a guide, and make sure to follow the instructions in the plan strictly while explaining."
+        Operational Mandates
+        1. Instructional Roadmap: You MUST follow the provided Explanation Plan section by section. Do not skip sections or jump ahead.
+        2. Strategy over Script: Do not read the "Explanation Strategy" verbatim or anything similar. Use it as a set of instructions on what to cover and how to
+            frame the story. Use your own natural words to fulfill the strategy.
+        3. Voice-Only Output: Your responses are converted directly to speech.
+            - CRITICAL: Never use markdown symbols (no *, #, -, or bolding).
+            - CRITICAL: Never use emojis or technical symbols that don't translate to clear speech.
+            - CRITICAL: Never say "As you can see" or "Refer to the list." Describe visuals using the "Visual Description" provided in the plan.
+        4. Synchronized Action: When a plan section includes an Action (e.g., "Scroll to Page 2"), you must preform that command at the very
+            beginning of your response and do not speak it out. 
+        5. Do not mention the name of the specific part you are about to say, just execute the instructions and the action without referring to 
+            the plan or the strategy by name.
+        6. Do not say you will scroll to page x, just do it silently.
+
+        The Interactive Loop (SOP)
+        For every section of the Explanation Plan:
+        1. Explain: Execute the Explanation Strategy using the "YouTube-style" energy. Use the suggested analogies (like the Campfire or Egg
+            Carton) to make abstract concepts vivid and relatable.
+        2. Action: Trigger the slide movement command at the start of the relevant section.
+        3. The Checkpoint (MANDATORY STOP): Every section ends with a Checkpoint. You MUST stop speaking after asking the checkpoint question.
+            - Do not proceed to the next section until the student responds.
+            - If the student is confused, stay on the current section and try a different analogy or simplify further.
+            - If the student answers correctly, provide brief positive reinforcement and transition to the next section.
+
+        Communication Style
+        - Scaffolding: Always explain why a concept matters before diving into how the math works.
+        - Simplicity: If you must use a technical term, define it immediately in plain English.
+        - Zero Context: Assume the student has forgotten the basics. Briefly remind them of foundational ideas (like what a "proton" is) if it
+            helps the current explanation.
+        - Bottom Line: End every section's explanation with a single "bottom line" sentence that captures the core takeaway.
+        {plan}
+    """)
+
+        return "Start explaining the topic using the provided plan right away."
 
 
 ## Tasks
@@ -158,12 +202,27 @@ async def entrypoint(ctx: agents.JobContext):
     # user_id = participant.attributes.get("user_id", "000")
 
     # Fetch chapter content from Bunny Storage
-    # chapter_content = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/content.md")
-    course_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/course_meta_data.md")
-    chapter_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/ch_meta_data.md")
+    course_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/01_Course_Knowledge_Schema.md")
+    chapter_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/ch1_meta_data.md")
+    chapter_topics_schema = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/ch1_topics_schema.md")
     # user_info = await fetch_md_from_bunny(f"users/{user_id}.md")
-    user_info = "Abdulrahman Albahrawi, is a second year accounting student at KFUPM. He is passionate about learning and has a keen interest in understanding complex concepts in a simple way. Abdulrahman is an active participant in class and enjoys engaging with interactive learning materials. He values clear explanations and appreciates when tutors provide real-life examples to illustrate difficult topics."
+
+    # For dev: get context components from local files instead of Bunny Storage
+    # chapter_content = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/content.md")
+    # with open("contexts/material/01_Course_Knowledge_Schema.md", "r", encoding="utf-8") as f:
+    #     course_meta_data = f.read()
+    # with open("contexts/output/ch1_meta_data.md", "r", encoding="utf-8") as f:
+    #     chapter_meta_data = f.read()
+    # with open("contexts/output/ch1_topics_schema.md", "r", encoding="utf-8") as f:
+    #     chapter_topics_schema = f.read()
     
+    user_info = """
+    Name: Abdulrahman Albahrawi
+    University: PSAU
+    Major: Accounting
+    Year: 3
+"""
+
     # Langauge code mapping for TTS
     ln_code = {
         "English": "en",
@@ -174,8 +233,10 @@ async def entrypoint(ctx: agents.JobContext):
     session: AgentSession = AgentSession(
         stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
         llm=openai.LLM(model=os.getenv("LLM_CHOICE", "gpt-4o-mini")),
-        # OpenAI TTs
+        # open AI
         tts=openai.TTS(voice="alloy", model="tts-1"),
+
+        
         vad=silero.VAD.load(),
     )
 
@@ -190,12 +251,13 @@ async def entrypoint(ctx: agents.JobContext):
             user_info=user_info,
             course_id=course_id,
             chapter_id=chapter_id,
+            topics_list=chapter_topics_schema,
         ),
     )
 
     # Generate initial greeting with chapter overview
     await session.generate_reply(
-        instructions="""Start by greeting the user and introducing yourself as their private AI tutor. Then ask the user which topic they would like to start with."""
+        instructions="""Start by greeting the user and introducing yourself as their private AI tutor. Then ask which topic they would like to start with. Do not call get_explanation_plan until the user replies with their chosen topic."""
     )
 
 
