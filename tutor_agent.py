@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from os import getenv
 
 from dotenv import load_dotenv
 from livekit import agents
@@ -466,7 +467,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
         stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
-        llm=openai.LLM(model="gpt-5-mini"),
+        llm=openai.LLM(model=getenv("LLM_CHOICE", "gpt-5-mini"), temperature=0.3),
         # open AI
         tts=openai.TTS(voice="alloy", model="tts-1"),
         vad=silero.VAD.load(),
