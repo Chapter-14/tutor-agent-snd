@@ -86,8 +86,6 @@ class Assistant(Agent):
         self.course_id = course_id
         self.chapter_id = chapter_id
         self.current_plan: ExplanationPlan | None = None
-        self.awaiting_checkpoint_response = False
-        self.active_checkpoint_id: str | None = None
         super().__init__(
             instructions=f"""
 # CRITICAL EXECUTION RULES (HIGHEST PRIORITY)
@@ -99,21 +97,29 @@ For EVERY section, you MUST follow this exact flow:
 1. Call start_section(section_id) to receive section content
 2. Execute the scroll action silently (tool handles this)
 3. Describe the visual, then explain ALL bullet points in the strategy
-4. Ask the checkpoint question
-5. Call checkpoint_reached(checkpoint_id) and STOP TALKING
-6. Wait for student response
-7. Call checkpoint_passed(checkpoint_id, understood) to assess response
-8. Call complete_section(section_id) to get next section
-9. Repeat
+4. Ask the checkpoint question and STOP TALKING
+5. Wait for student response
+6. Call checkpoint_passed(student_understood) to assess response
+7. Call complete_section(section_id) to get next section
+8. Repeat
 
 HARD RULES
 - NEVER skip a section or bullet point
-- NEVER continue explaining after calling checkpoint_reached()
+- NEVER continue explaining after asking the checkpoint question
 - NEVER call start_section() for section N+1 until section N is marked complete
 - NEVER proceed past a checkpoint without student response
 
 VIOLATION = FAILURE
 If you skip content, the student will have knowledge gaps that compound in later sections.
+
+# TOOL RETURN VALUES
+Tools return structured status messages:
+- [SUCCESS] - Action completed. Proceed according to the MANDATORY TOOL USAGE SEQUENCE above.
+- [ERROR] - Action failed. Read the error message and correct your approach.
+- [WAITING] - You MUST stop speaking and wait for user input before any further tool calls.
+- [HINT] - Contains guidance for helping a confused student. Re-explain using the hint, then ask the checkpoint question again and wait for student response.
+
+CRITICAL: Tools do NOT tell you what to call next. YOU must follow the sequence defined above.
 
 # ROLE
 Your name is Sanad. You are a highly interactive Private AI Tutor. All of your responses must be in the language specified by the user which is {language}.
@@ -132,23 +138,19 @@ You are interacting with the user via voice, and must apply the following rules 
 
 1. `get_explanation_plan(topic: str)`
    - USE: Only after the user explicitly responds with a topic request. Never call this tool before hearing from the user in the current session. After the user responds, map their request to the matching topic slug from the provided chapter topics JSON object, then call this tool with that slug as the topic argument.
-   - PURPOSE: Loads the structured explanation plan. After calling this tool, immediately call start_section() for the first section.
+   - PURPOSE: Loads the structured explanation plan.
 
 2. `start_section(section_id: str)`
    - USE: Begin explaining a section. You must complete sections in order.
    - PURPOSE: Returns the section content to explain. Use this tool BEFORE you start speaking about a section.
 
-3. `checkpoint_reached(checkpoint_id: str)`
-   - USE: MANDATORY - Call this AFTER asking the checkpoint question.
-   - PURPOSE: Signals that you have asked the checkpoint question. You MUST STOP and wait for student response.
+3. `checkpoint_passed(student_understood: bool)`
+   - USE: After the student responds to your checkpoint question.
+   - PURPOSE: Evaluate if the student understood. Set to False if they need clarification.
 
-4. `checkpoint_passed(checkpoint_id: str, student_understood: bool)`
-   - USE: After student responds to your checkpoint question.
-   - PURPOSE: Mark a checkpoint as passed. Set student_understood to False if they need clarification.
-
-5. `complete_section(section_id: str)`
+4. `complete_section(section_id: str)`
    - USE: After checkpoint is passed.
-   - PURPOSE: Mark section as complete and get information about the next section.
+   - PURPOSE: Mark section as complete.
 
 6. `scroll_to_page(page_number: int)`
    - USE: Manually scroll if needed (start_section() handles automatic scrolling when needed).
@@ -194,10 +196,11 @@ Silent Synchronized Action: When a section includes an Action (scroll), the star
 No Meta-Talk: Do not mention the name of the section, the strategy, or the plan. Simply execute the narrative without referring to the plan structure by name.
 
 Checkpoint Behavior:
-- Every section ends with a Checkpoint. You MUST stop speaking immediately after asking the checkpoint question.
+- Every section ends with a Checkpoint. After asking the checkpoint question, STOP and wait for the student to respond.
 - Do not proceed to the next section until the student responds.
-- If the student is confused, use checkpoint_passed() with student_understood=False to get guidance on how to explain differently.
-- If the student answers correctly, use checkpoint_passed() with student_understood=True, then provide brief positive reinforcement.
+- After the student responds, call checkpoint_passed(student_understood) to evaluate their response.
+- If the student is confused (student_understood=False), you will receive guidance on how to explain differently. Re-explain using this guidance, then ask the checkpoint question again and STOP to wait for the student's response. When they respond, call checkpoint_passed() again to evaluate their new response. Repeat this cycle until the student understands.
+- If the student understood (student_understood=True), you MUST verbally acknowledge their correct answer and provide brief positive reinforcement BEFORE calling complete_section(). Do NOT immediately call complete_section() without speaking first.
 """,
             chat_ctx=chat_ctx,
         )
@@ -276,8 +279,6 @@ CHECKPOINT: {section.checkpoint.id}
 Mandatory: {section.checkpoint.mandatory}
 Question: {section.checkpoint.question}
 Success Criteria: {section.checkpoint.success_criteria}
-
-IMPORTANT: After explaining all strategy points and asking this question, you MUST call checkpoint_reached('{section.checkpoint.id}').
 """
         return prompt
 
@@ -289,11 +290,10 @@ IMPORTANT: After explaining all strategy points and asking this question, you MU
             page_number: The page number to scroll to (1-36).
         """
         await self._execute_scroll(page_number)
-        return "Continue with your explanation and make sure to refer to the content on the page you just scrolled to in your explanation."
+        return f"[SUCCESS] Scrolled to page {page_number}."
 
     @function_tool(
-        description="""Fetch the explanation plan for a topic. Call start_section() after this to begin.
-        Only use after the user explicitly states what they want to study in the current session."""
+        description="""Fetch the explanation plan for a topic. Only use after the user explicitly states what they want to study in the current session."""
     )
     async def get_explanation_plan(self, topic: str) -> str:
         """Fetches and loads the structured explanation plan for a topic."""
@@ -304,39 +304,32 @@ IMPORTANT: After explaining all strategy points and asking this question, you MU
         plan_data = json.loads(plan_json)
 
         self.current_plan = self._parse_plan(plan_data)
-        self.awaiting_checkpoint_response = False
-        self.active_checkpoint_id = None
 
         first_section = self.current_plan.sections[0]
 
-        return f"""
-Plan loaded: {self.current_plan.title}
-Total sections: {self.current_plan.total_sections}
-Goal: {self.current_plan.goal}
-
-IMPORTANT: You must now call start_section('{first_section.id}') to begin the explanation.
-Do NOT start explaining until you receive the section content from the tool.
-"""
+        return f"[SUCCESS] Plan loaded: {self.current_plan.title}. Total sections: {self.current_plan.total_sections}. Goal: {self.current_plan.goal}. First section ID: {first_section.id}."
 
     @function_tool(description="Begin explaining a section. You must complete sections in order.")
     async def start_section(self, section_id: str) -> str:
         """Begin explaining a section. You must complete sections in order."""
 
         if self.current_plan is None:
-            return "ERROR: No plan loaded. Call get_explanation_plan first."
+            return "[ERROR] No plan loaded. Call get_explanation_plan first."
 
         section = self._get_section_by_id(section_id)
         if section is None:
-            return f"ERROR: Section {section_id} not found."
+            return f"[ERROR] Section {section_id} not found."
 
         if section.requires_completion_of:
             prereq = self._get_section_by_id(section.requires_completion_of)
             if prereq and not prereq.completed:
-                return f"ERROR: You must complete {prereq.id} ({prereq.title}) before starting this section."
+                return f"[ERROR] You must complete {prereq.id} ({prereq.title}) before starting this section."
 
-        if self.awaiting_checkpoint_response:
+        # Prevent starting new section if previous checkpoint not completed
+        current = self.current_plan.current_section
+        if current and current.checkpoint and not current.checkpoint.completed and current.started:
             return (
-                "ERROR: You have an active checkpoint. Wait for student response before proceeding."
+                "[ERROR] Complete the current section's checkpoint before starting a new section."
             )
 
         section.started = True
@@ -345,57 +338,32 @@ Do NOT start explaining until you receive the section content from the tool.
         if section.action and section.action.type == "scroll" and section.action.page:
             await self._execute_scroll(section.action.page)
 
-        return self._format_section_prompt(section)
+        section_prompt = self._format_section_prompt(section)
+        return f"[SUCCESS] Section started: {section.title}.\n{section_prompt}"
 
     @function_tool(
-        description="MANDATORY: Call this at every checkpoint AFTER asking the checkpoint question. Blocks further progress until student responds."
+        description="Call this AFTER the student responds to your checkpoint question. Evaluates if they understood."
     )
-    async def checkpoint_reached(self, checkpoint_id: str) -> str:
-        """Signal that you've asked the checkpoint question. You MUST stop and wait for student response."""
+    async def checkpoint_passed(self, student_understood: bool) -> str:
+        """Evaluate the student's response to the checkpoint question."""
 
         if self.current_plan is None:
-            return "ERROR: No plan loaded."
+            return "[ERROR] No plan loaded."
 
         section = self.current_plan.current_section
         if section is None or section.checkpoint is None:
-            return "ERROR: No active checkpoint for current section."
+            return "[ERROR] No current section with checkpoint."
 
-        if section.checkpoint.id != checkpoint_id:
-            return f"ERROR: Checkpoint {checkpoint_id} does not match current section's checkpoint."
-
-        self.awaiting_checkpoint_response = True
-        self.active_checkpoint_id = checkpoint_id
-
-        return "CHECKPOINT ACTIVE - You have asked the checkpoint question. DO NOT continue explaining. Wait silently for the student to respond."
-
-    @function_tool(
-        description="Call this when the student has responded to a checkpoint question. Pass student_understood=True if they understood, False if they need clarification."
-    )
-    async def checkpoint_passed(self, checkpoint_id: str, student_understood: bool) -> str:
-        """Mark a checkpoint as passed after student responds."""
-
-        if not self.awaiting_checkpoint_response:
-            return "ERROR: No active checkpoint to pass."
-
-        if self.active_checkpoint_id != checkpoint_id:
-            return f"ERROR: Active checkpoint is {self.active_checkpoint_id}, not {checkpoint_id}."
-
-        if self.current_plan is None:
-            return "ERROR: No plan loaded."
-
-        section = self.current_plan.current_section
-        if section is None or section.checkpoint is None:
-            return "ERROR: No current section with checkpoint."
+        if section.checkpoint.completed:
+            return "[ERROR] Checkpoint already completed."
 
         section.checkpoint.student_responded = True
 
         if student_understood:
             section.checkpoint.completed = True
-            self.awaiting_checkpoint_response = False
-            self.active_checkpoint_id = None
-            return "Checkpoint passed! Provide brief positive reinforcement, then call complete_section() to finish this section."
+            return "[SUCCESS] Checkpoint passed. FIRST provide brief positive reinforcement to the student, acknowledging their correct understanding. THEN call complete_section()."
         else:
-            return f"Student needs clarification. Stay on this section. Hint: {section.checkpoint.on_confusion}"
+            return f"[HINT] Student needs clarification. Use this guidance to re-explain: {section.checkpoint.on_confusion}. After re-explaining, ask the checkpoint question again and wait for the student to respond. Then call checkpoint_passed() again with their new response."
 
     @function_tool(
         description="Mark the current section as complete. Required before moving to the next section."
@@ -405,24 +373,24 @@ Do NOT start explaining until you receive the section content from the tool.
 
         section = self._get_section_by_id(section_id)
         if section is None:
-            return f"ERROR: Section {section_id} not found."
+            return f"[ERROR] Section {section_id} not found."
 
         if section.checkpoint and not section.checkpoint.completed:
-            return "ERROR: You must pass the checkpoint before completing this section."
+            return "[ERROR] You must pass the checkpoint before completing this section."
 
         section.completed = True
 
         if self.current_plan is None:
-            return "ERROR: No plan loaded."
+            return "[ERROR] No plan loaded."
 
         if self.current_plan.is_complete:
-            return "All sections complete! Deliver the final conclusion and ask if student is ready to move to the next topic."
+            return "[SUCCESS] All sections complete. Plan finished."
 
         if section.sequence < len(self.current_plan.sections):
             next_section = self.current_plan.sections[section.sequence]
-            return f"Section {section_id} complete. Next section: {next_section.id} - {next_section.title}. Call start_section('{next_section.id}') to continue."
+            return f"[SUCCESS] Section {section_id} completed. Next section ID: {next_section.id}."
 
-        return f"Section {section_id} complete. All sections finished."
+        return f"[SUCCESS] Section {section_id} completed. All sections finished."
 
 
 ## Tasks
@@ -441,18 +409,18 @@ class CollectIntent(AgentTask[str]):
         )
 
     @function_tool
-    async def chapter_overview(self) -> None:
+    async def chapter_overview(self) -> str:
         """Use this when the user tells you he want a comprehensive overview of all chapter topics."""
         print("User intent is all")
         self.complete("all")
-        return
+        return "[SUCCESS] User intent recorded: comprehensive chapter overview."
 
     @function_tool
-    async def collect_topic(self, topic: str) -> None:
+    async def collect_topic(self, topic: str) -> str:
         """Use this only when the user tells you they want a specific topic to be explained, this tool allows for collecting the topic they want to focus on."""
         print("User intent collected:", topic)
         self.complete(topic)
-        return
+        return f"[SUCCESS] User intent recorded: focus on topic '{topic}'."
 
 
 ## Entrypoint for the agent
@@ -470,7 +438,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract the attributes we set in the frontend
     course_id = participant.attributes.get("course_id", "phys_1040")
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "Arabic")
+    language = participant.attributes.get("language", "English")
     # user_id = participant.attributes.get("user_id", "000")
 
     # Fetch chapter content from Bunny Storage
@@ -481,21 +449,11 @@ async def entrypoint(ctx: agents.JobContext):
     chapter_topics_schema = await fetch_md_from_bunny(
         f"sanad/{course_id}/{chapter_id}/ch1_topics_schema.md"
     )
-    # user_info = await fetch_md_from_bunny(f"users/{user_id}.md")
-
-    # For dev: get context components from local files instead of Bunny Storage
-    # chapter_content = await fetch_md_from_bunny(f"sanad/{course_id}/{chapter_id}/content.md")
-    # with open("contexts/material/01_Course_Knowledge_Schema.md", "r", encoding="utf-8") as f:
-    #     course_meta_data = f.read()
-    # with open("contexts/output/ch1_meta_data.md", "r", encoding="utf-8") as f:
-    #     chapter_meta_data = f.read()
-    # with open("contexts/output/ch1_topics_schema.md", "r", encoding="utf-8") as f:
-    #     chapter_topics_schema = f.read()
 
     user_info = """
-    Name: Abdulrahman Albahrawi
+    Name: Maisara Almarakbi
     University: PSAU
-    Major: Accounting
+    Major: Computer Engineering
     Year: 3
     """
 
