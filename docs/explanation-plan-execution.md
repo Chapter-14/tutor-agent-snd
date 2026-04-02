@@ -21,7 +21,7 @@ graph TD
 ## Tool Descriptions
 
 ### 1. `get_explanation_plan(topic)`
-- **Purpose**: Fetches the JSON explanation plan for the selected topic from Bunny Storage.
+- **Purpose**: Fetches the JSON explanation plan for the selected topic from Bunny Storage. As a side effect, it also notifies the frontend of the current topic being explained.
 - **Parameters**:
   - `topic` (str): The topic to fetch content for.
 - **Return Value**: An `ExplanationPlan` object parsed from JSON.
@@ -98,3 +98,4 @@ graph TD
 ## Frontend Integration
 - **UI Commands**: Sent via LiveKit's `publish_data()`.
 - **Scroll Format**: JSON `{"action": "scroll", "page": <number>}`.
+- **Topic Change Format**: JSON `{"action": "set_topic", "topic": "<slug>"}`.

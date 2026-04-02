@@ -33,7 +33,7 @@ Used to fetch course materials, including explanation plans and multimedia conte
 Configures the agent by initializing sessions for users based on their attributes (e.g., `course_id`, `chapter_id`, `language`). Handles session lifecycles and context.
 
 #### 5. **Job Context**
-Provides a communication channel for server-to-client messaging, including UI actions (e.g., scrolling to specific pages).
+Provides a communication channel for server-to-client messaging, including UI actions such as scrolling to specific pages and updating the current topic.
 
 ## Data Flow Explanation
 
@@ -48,7 +48,7 @@ The data flow can be summarized in the following steps:
 4. **Text-to-Speech (TTS)**:
    - Generated text is converted into audio output and sent back to the student.
 5. **Frontend Integration**:
-   - Commands like page scrolling or UI updates are sent via the `publish_data()` method, ensuring smooth interaction.
+   - Commands like page scrolling or topic updates are sent via the `publish_data()` method, ensuring smooth interaction. The topic update command follows this format: `{"action": "set_topic", "topic": "<topic_slug>"}`.
 
 ## Entry Point Initialization
 

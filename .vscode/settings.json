@@ -1,3 +1,10 @@
 {
-  "cSpell.words": ["deepgram", "elevenlabs", "livekit", "sanad", "silero"]
+  "cSpell.words": [
+    "deepgram",
+    "dotenv",
+    "elevenlabs",
+    "livekit",
+    "sanad",
+    "silero"
+  ]
 }

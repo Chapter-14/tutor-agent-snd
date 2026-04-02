@@ -1,12 +1,9 @@
 import json
 from dataclasses import dataclass
-from os import getenv
-
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession, AgentTask
+from livekit.agents import Agent
 from livekit.agents.llm import function_tool
-from livekit.plugins import openai, silero
 
 from bunny import fetch_md_from_bunny
 
@@ -220,6 +217,19 @@ Checkpoint Behavior:
             payload, reliable=True, topic="ui-control"
         )
 
+    async def _send_current_topic(self, topic: str) -> None:
+        payload = json.dumps({"action": "set_topic", "topic": topic, "number_of_sections": self.current_plan.total_sections})
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )
+
+    async def _send_topic_done(self) -> None:
+        payload = json.dumps({"action": "topic_done"})
+        print(f"Publishing topic_done for topic: {self.current_plan.topic}")
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )
+
     def _parse_plan(self, plan_data: dict) -> ExplanationPlan:
         sections = []
         for section_data in plan_data["sections"]:
@@ -305,6 +315,7 @@ Success Criteria: {section.checkpoint.success_criteria}
         plan_data = json.loads(plan_json)
 
         self.current_plan = self._parse_plan(plan_data)
+        await self._send_current_topic(topic)
 
         first_section = self.current_plan.sections[0]
 
@@ -383,6 +394,8 @@ Success Criteria: {section.checkpoint.success_criteria}
 
         if self.current_plan is None:
             return "[ERROR] No plan loaded."
+        
+        await self._send_topic_done()
 
         if self.current_plan.is_complete:
             return "[SUCCESS] All sections complete. Plan finished."
@@ -390,110 +403,6 @@ Success Criteria: {section.checkpoint.success_criteria}
         if section.sequence < len(self.current_plan.sections):
             next_section = self.current_plan.sections[section.sequence]
             return f"[SUCCESS] Section {section_id} completed. Next section ID: {next_section.id}."
+            
 
         return f"[SUCCESS] Section {section_id} completed. All sections finished."
-
-
-## Tasks
-class CollectIntent(AgentTask[str]):
-    def __init__(self, chat_ctx=None, language=None):
-        super().__init__(
-            instructions=f"""
-            You must use the language the user choose. Which is {language}.
-            The user greeting and everything else is already done by the main agent, your only task is to collect the user intent for this session.
-            Immediately ask for the user intent of this session and whether they want you to explain all chapter topics in the order of
-            the provided material or focus on a specific one. Don't ask about the material as it is provided to the main agent.
-            Do not ask about anything else at any point. Only ask about the user intent and the specific topic if they choose to focus on one.
-            Store users answers using the tools available to you here.
-            """,
-            chat_ctx=chat_ctx,
-        )
-
-    @function_tool
-    async def chapter_overview(self) -> str:
-        """Use this when the user tells you he want a comprehensive overview of all chapter topics."""
-        print("User intent is all")
-        self.complete("all")
-        return "[SUCCESS] User intent recorded: comprehensive chapter overview."
-
-    @function_tool
-    async def collect_topic(self, topic: str) -> str:
-        """Use this only when the user tells you they want a specific topic to be explained, this tool allows for collecting the topic they want to focus on."""
-        print("User intent collected:", topic)
-        self.complete(topic)
-        return f"[SUCCESS] User intent recorded: focus on topic '{topic}'."
-
-
-## Entrypoint for the agent
-
-
-async def entrypoint(ctx: agents.JobContext):
-    """Entry point for the agent."""
-
-    # Auto-connect to room (dev mode)
-    await ctx.connect(auto_subscribe=agents.AutoSubscribe.SUBSCRIBE_ALL)
-
-    # Wait for the first human participant to arrive
-    participant = await ctx.wait_for_participant()
-
-    # Extract the attributes we set in the frontend
-    course_id = participant.attributes.get("course_id", "phys_1040")
-    chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "English")
-    # user_id = participant.attributes.get("user_id", "000")
-
-    # Fetch chapter content from Bunny Storage
-    course_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/01_Course_Knowledge_Schema.md")
-    chapter_meta_data = await fetch_md_from_bunny(
-        f"sanad/{course_id}/{chapter_id}/ch1_meta_data.md"
-    )
-    chapter_topics_schema = await fetch_md_from_bunny(
-        f"sanad/{course_id}/{chapter_id}/ch1_topics_schema.md"
-    )
-
-    user_info = """
-    Name: Maisara Almarakbi
-    University: PSAU
-    Major: Computer Engineering
-    Year: 3
-    """
-
-    # Langauge code mapping for TTS
-    ln_code = {
-        "English": "en",
-        "Arabic": "ar",
-    }
-
-    # Configure the voice pipeline with the essentials
-    session: AgentSession = AgentSession(
-        stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
-        llm=openai.LLM(model=getenv("LLM_CHOICE", "gpt-5-mini"), temperature=0.3),
-        # open AI
-        tts=openai.TTS(voice="alloy", model="tts-1"),
-        vad=silero.VAD.load(),
-    )
-
-    # Start the session
-    await session.start(
-        room=ctx.room,
-        agent=Assistant(
-            ctx,
-            course_meta_data=course_meta_data,
-            chapter_meta_data=chapter_meta_data,
-            language=language,
-            user_info=user_info,
-            course_id=course_id,
-            chapter_id=chapter_id,
-            topics_list=chapter_topics_schema,
-        ),
-    )
-
-    # Generate initial greeting with chapter overview
-    await session.generate_reply(
-        instructions="""Start by greeting the user and introducing yourself as their private AI tutor. Then provide an overview of the chapter topics. Then ask the user to choose a topic to explore. Do not call get_explanation_plan until the user replies with their chosen topic."""
-    )
-
-
-if __name__ == "__main__":
-    # Run the agent
-    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))

@@ -52,7 +52,7 @@ Before first run, download the required model files (Silero VAD, turn detector):
 
 ```bash
 # Download model files for basic agent
-uv run python tutor_agent.py download-files
+uv run python main.py download-files
 
 ```
 
@@ -60,13 +60,13 @@ uv run python tutor_agent.py download-files
 
 ```bash
 # Basic agent (minimal configuration)
-uv run python tutor_agent.py console
+uv run python main.py console
 
 # Development mode (connects to LiveKit - optional)
-uv run python tutor_agent.py dev
+uv run python main.py dev
 
 # Production mode
-uv run python tutor_agent.py start
+uv run python main.py start
 ```
 
 ## Architecture
@@ -89,7 +89,7 @@ uv run python tutor_agent.py start
 
 ### Basic Agent
 
-**`tutor_agent.py`** - The simplest possible LiveKit voice agent
+**`main.py`** - The simplest possible LiveKit voice agent
 
 - Minimal configuration with only essential components
 - Great for learning and testing basic functionality
@@ -98,7 +98,7 @@ uv run python tutor_agent.py start
 
 ### MCP Agent
 
-**`tutor_agent.py`** - Full-featured voice agent with:
+**`main.py`** - Full-featured voice agent with:
 
 - Configurable speech-to-text, LLM, and text-to-speech providers
 - MCP server integration for tool calling
@@ -215,7 +215,7 @@ This will write your LiveKit credentials to `.env.local`
 Run your agent connected to LiveKit Cloud:
 
 ```bash
-uv run python tutor_agent.py start
+uv run python main.py start
 ```
 
 ### 6. Create an Agent in LiveKit Cloud
@@ -236,7 +236,7 @@ Console mode lets you test your agent locally without needing a LiveKit server:
 
 ```bash
 # Run agent in dev mode
-uv run python tutor_agent.py dev
+uv run python main.py dev
 ```
 
 This will start an interactive console where you can speak to your agent using your microphone and speakers.
