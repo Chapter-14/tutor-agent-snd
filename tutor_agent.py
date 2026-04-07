@@ -168,8 +168,8 @@ You are interacting with the user via voice, and must apply the following rules 
 Use this to understand the overall course structure, learning objectives, and how the chapter fits into the broader curriculum, which can help you provide contextually relevant explanations and examples to the student.
 {course_meta_data}
 
-# CHAPTER META INFORMATION
-Use this to understand the structure of the chapter and how to navigate it effectively for the student
+# Current Chapter Information
+This is a basic information about the current chapter.
 {chapter_meta_data}
 
 # Chapter topics JSON object. Each topic includes a slug key. Use this list to map the user's natural-language
@@ -223,9 +223,20 @@ Checkpoint Behavior:
             payload, reliable=True, topic="ui-control"
         )
 
-    async def _send_topic_done(self) -> None:
-        payload = json.dumps({"action": "topic_done"})
-        print(f"Publishing topic_done for topic: {self.current_plan.topic}")
+    async def _send_current_section(self, section: str) -> None:
+        payload = json.dumps({"action": "set_section", "section": section, "current_section_index": self.current_plan.current_section_index + 1})
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )
+
+    async def _send_section_checkpoint(self, question: str) -> None:
+        payload = json.dumps({"action": "set_checkpoint", "checkpoint_question": question})
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )   
+
+    async def _send_section_done(self, section: str) -> None:
+        payload = json.dumps({"action": "section_done", "section": section})
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
@@ -346,6 +357,8 @@ Success Criteria: {section.checkpoint.success_criteria}
 
         section.started = True
         self.current_plan.current_section_index = section.sequence - 1
+        await self._send_current_section(section.title)
+        await self._send_section_checkpoint(self.current_plan.current_section.checkpoint.question)
 
         if section.action and section.action.type == "scroll" and section.action.page:
             await self._execute_scroll(section.action.page)
@@ -395,7 +408,7 @@ Success Criteria: {section.checkpoint.success_criteria}
         if self.current_plan is None:
             return "[ERROR] No plan loaded."
         
-        await self._send_topic_done()
+        await self._send_section_done(section.title)
 
         if self.current_plan.is_complete:
             return "[SUCCESS] All sections complete. Plan finished."

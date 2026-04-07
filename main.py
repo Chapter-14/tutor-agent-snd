@@ -25,18 +25,23 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract the attributes we set in the frontend
     course_id = participant.attributes.get("course_id", "phys_1040")
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "Arabic")
-    # user_id = participant.attributes.get("user_id", "000")
+    language = participant.attributes.get("language", "English")
+    user_name = participant.attributes.get("user_name", "undefined")
 
     # Fetch chapter content from Bunny Storage
     course_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/01_Course_Knowledge_Schema.md")
-    chapter_meta_data = await fetch_md_from_bunny(
-        f"sanad/{course_id}/{chapter_id}/ch1_meta_data.md"
-    )
     chapter_topics_schema_raw = await fetch_md_from_bunny(
         f"sanad/{course_id}/{chapter_id}/topics_list.json"
     )
+
+    # Parse the chapter topics schema
     chapter_topics_data = json.loads(chapter_topics_schema_raw)
+
+    chapter_meta_data = f"""
+Current Chapter: {chapter_topics_data['chapter']}
+Chapter number: {chapter_topics_data['chapter_number']}
+Chapter id: {chapter_topics_data['chapter_id']}"""
+
     chapter_topics_schema = "\n".join(
         f"""{idx + 1}. {topic['name']}: 
         brief: {topic['brief']} 
@@ -44,11 +49,8 @@ async def entrypoint(ctx: agents.JobContext):
         for idx, topic in enumerate(chapter_topics_data["topics"])
     )
 
-    user_info = """
-    Name: Maisara Almarakbi
-    University: PSAU
-    Major: Computer Engineering
-    Year: 3
+    user_info = f"""
+    Name: {user_name}
     """
 
     # Langauge code mapping for TTS
@@ -67,7 +69,6 @@ async def entrypoint(ctx: agents.JobContext):
             model="eleven_flash_v2_5",
             language=ln_code.get(language, "en")
         ),
-        # tts=openai.TTS(model="gpt-4o-mini-tts", language=ln_code.get(language, "en")),
         vad=silero.VAD.load(),
     )
 
