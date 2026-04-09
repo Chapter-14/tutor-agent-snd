@@ -25,7 +25,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract the attributes we set in the frontend
     course_id = participant.attributes.get("course_id", "phys_1040")
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "English")
+    language = participant.attributes.get("language", "Arabic")
     user_name = participant.attributes.get("user_name", "undefined")
 
     # Fetch chapter content from Bunny Storage
