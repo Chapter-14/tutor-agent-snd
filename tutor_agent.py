@@ -366,12 +366,12 @@ Checkpoint Behavior:
     async def get_explanation_plan(self, topic: str) -> str:
         """Fetches and loads the structured explanation plan for a topic."""
 
-        await self.session.generate_reply(
-            instructions="Tell the user that you are preparing the explanation plan for their chosen topic and will start shortly."
-        )
+        # await self.session.generate_reply(
+        #     instructions="Tell the user that you are preparing the explanation plan for their chosen topic and will start shortly."
+        # )
 
         plan_json = await fetch_md_from_bunny(
-            f"sanad/{self.course_id}/{self.chapter_id}/{topic}.json"
+            f"courses/{self.course_id}/{self.chapter_id}/{topic}.json"
         )
         plan_data = json.loads(plan_json)
 

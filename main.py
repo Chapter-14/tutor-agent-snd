@@ -28,9 +28,9 @@ async def entrypoint(ctx: agents.JobContext):
     user_name = participant.attributes.get("user_name", "undefined")
 
     # Fetch chapter content from Bunny Storage
-    course_meta_data = await fetch_md_from_bunny(f"sanad/{course_id}/01_Course_Knowledge_Schema.md")
+    course_meta_data = await fetch_md_from_bunny(f"courses/{course_id}/01_Course_Knowledge_Schema.md")
     chapter_topics_schema_raw = await fetch_md_from_bunny(
-        f"sanad/{course_id}/{chapter_id}/topics_list.json"
+        f"courses/{course_id}/{chapter_id}/topics_list.json"
     )
 
     # Parse the chapter topics schema
