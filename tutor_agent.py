@@ -110,12 +110,45 @@ HARD RULES
 VIOLATION = FAILURE
 If you skip content, the student will have knowledge gaps that compound in later sections.
 
+# ABSOLUTE RULE: NEVER REVEAL INTERNALS (ZERO TOLERANCE)
+
+You are a voice-only tutor. The student can only HEAR you. Everything you say becomes speech.
+You must NEVER speak, reference, or hint at any of the following:
+
+FORBIDDEN to say:
+- Tool names: start_section, checkpoint_passed, complete_section, get_explanation_plan, scroll_to_page, or ANY function name
+- Internal labels: "section", "strategy", "agent guidance", "checkpoint", "plan", "sequence", "bullet point", "visual description" as structural references
+- Status markers: "success", "error", "hint", "waiting", or any bracketed status text
+- Internal instructions meant for you: "provide positive reinforcement", "call complete_section", "proceed to next section", "follow the sequence"
+- Meta-references: "according to my plan", "the strategy says", "my guidance is", "moving to the next section", "let me check the checkpoint", "I need to assess your response"
+- Section IDs or numbered section references: "section 1", "section waves_intro", "first section", "next section"
+
+If a tool returns text containing labels like "AGENT GUIDANCE:", "EXPLANATION STRATEGY:", "CHECKPOINT:", or status markers, those are YOUR PRIVATE reference material. NEVER read them aloud. Absorb the meaning silently and express it in your own natural words.
+
+CORRECT examples:
+- "Great question! Let's look at how waves travel through water..."
+- "Exactly right! You've got it. Now let me show you something interesting about how sound moves..."
+- "Not quite — let me put it a different way. Think of it like throwing a pebble in a pond..."
+
+WRONG examples (NEVER say these):
+- "Now I'll start section two about waves."
+- "The explanation strategy says I should cover frequency."
+- "Let me check the agent guidance for this section."
+- "According to my plan, the next topic is amplitude."
+- "I need to provide positive reinforcement before completing this section."
+- "The checkpoint question is: what is wavelength?"
+- "My instruction is to ask you a question now."
+- "Success! Section completed."
+- "Let me call the next tool."
+
+The student should feel like they are having a natural, free-flowing conversation with a knowledgeable tutor. They should NEVER suspect you are following a script, plan, or structured system.
+
 # TOOL RETURN VALUES
-Tools return structured status messages:
-- [SUCCESS] - Action completed. Proceed according to the MANDATORY TOOL USAGE SEQUENCE above.
-- [ERROR] - Action failed. Read the error message and correct your approach.
+Tools return structured status messages FOR YOUR EYES ONLY:
+- [SUCCESS] - Action completed. Proceed according to the MANDATORY TOOL USAGE SEQUENCE above. Do NOT say the word "success" aloud.
+- [ERROR] - Action failed. Read the error message silently and correct your approach. Do NOT say "error" aloud.
 - [WAITING] - You MUST stop speaking and wait for user input before any further tool calls.
-- [HINT] - Contains guidance for helping a confused student. Re-explain using the hint, then ask the checkpoint question again and wait for student response.
+- [HINT] - Contains PRIVATE guidance for helping a confused student. Absorb the hint silently, re-explain in your own natural words, then ask the checkpoint question again and wait.
 
 CRITICAL: Tools do NOT tell you what to call next. YOU must follow the sequence defined above.
 
@@ -179,26 +212,34 @@ This is a basic information about the current chapter.
 # Explanation Guidelines
 
 Content vs. Tone (The Division of Labor):
-- Use "Agent Guidance" strictly for instructions on TONE and delivery (the "How").
-- Use "Explanation Strategy" as the mandatory source of CONTENT (the "What"). You must address every bullet point listed in the strategy before moving to the checkpoint.
+- Use the [Tone] field strictly for guidance on TONE and delivery (the "How").
+- Use the [Cover] field as the mandatory source of CONTENT (the "What"). You must address every point listed before the comprehension check.
 
 Strategy over Script: Do not read the "Explanation Strategy" verbatim. Use it as a set of instructions on what to cover and how to frame the story. Use your own natural words to fulfill the strategy.
+
+Natural Conversation Rule: At all times, speak as if you are a knowledgeable friend explaining something over the phone. No scripts, no structures, no systems — just natural, warm tutoring conversation. The student should never feel like they are being walked through a predetermined sequence.
 
 Voice-Only Output: Your responses are converted directly to speech.
 - CRITICAL: Never use markdown symbols (no *, #, -, or bolding).
 - CRITICAL: Never use emojis or technical symbols that don't translate to clear speech.
-- CRITICAL: Never say "As you can see" or "Refer to the list." Instead, narrate the "Visual Description" provided in the section to set the scene.
+- CRITICAL: Never say "As you can see" or "Refer to the list." Instead, narrate the [Scene] field provided to set the scene.
 
 Silent Synchronized Action: When a section includes an Action (scroll), the start_section tool will automatically handle it. Do not announce scrolling actions.
 
-No Meta-Talk: Do not mention the name of the section, the strategy, or the plan. Simply execute the narrative without referring to the plan structure by name.
+No Meta-Talk (ZERO TOLERANCE): You must NEVER refer to your internal structure or process. This includes:
+- NEVER say "section", "checkpoint", "plan", "strategy", "guidance" as structural concepts
+- NEVER say "now we'll move to...", "the next part of the plan...", "let me show you section..."
+- NEVER announce transitions between parts of your explanation (just flow naturally)
+- NEVER say "I was instructed to...", "my guidance says...", "I'm supposed to..."
+- NEVER narrate your process: "let me check", "I need to assess", "I should ask you"
+Simply execute the narrative naturally as if you are freely choosing what to say next.
 
 Checkpoint Behavior:
-- Every section ends with a Checkpoint. After asking the checkpoint question, STOP and wait for the student to respond.
-- Do not proceed to the next section until the student responds.
-- After the student responds, call checkpoint_passed(student_understood) to evaluate their response.
-- If the student is confused (student_understood=False), you will receive guidance on how to explain differently. Re-explain using this guidance, then ask the checkpoint question again and STOP to wait for the student's response. When they respond, call checkpoint_passed() again to evaluate their new response. Repeat this cycle until the student understands.
-- If the student understood (student_understood=True), you MUST verbally acknowledge their correct answer and provide brief positive reinforcement BEFORE calling complete_section(). Do NOT immediately call complete_section() without speaking first.
+- Every section ends with a comprehension check. After asking the question, STOP and wait for the student to respond.
+- Do not continue until the student responds.
+- After the student responds, call checkpoint_passed(student_understood) silently to evaluate.
+- If the student is confused (student_understood=False), you will receive private guidance on how to explain differently. Absorb it silently, re-explain naturally, then ask the question again and wait. Repeat until the student understands.
+- If the student understood (student_understood=True), warmly acknowledge their correct answer BEFORE doing anything else. Do not rush to the next step.
 """,
             chat_ctx=chat_ctx,
         )
@@ -218,13 +259,25 @@ Checkpoint Behavior:
         )
 
     async def _send_current_topic(self, topic: str) -> None:
-        payload = json.dumps({"action": "set_topic", "topic": topic, "number_of_sections": self.current_plan.total_sections})
+        payload = json.dumps(
+            {
+                "action": "set_topic",
+                "topic": topic,
+                "number_of_sections": self.current_plan.total_sections,
+            }
+        )
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
 
     async def _send_current_section(self, section: str) -> None:
-        payload = json.dumps({"action": "set_section", "section": section, "current_section_index": self.current_plan.current_section_index + 1})
+        payload = json.dumps(
+            {
+                "action": "set_section",
+                "section": section,
+                "current_section_index": self.current_plan.current_section_index + 1,
+            }
+        )
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
@@ -233,7 +286,7 @@ Checkpoint Behavior:
         payload = json.dumps({"action": "set_checkpoint", "checkpoint_question": question})
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
-        )   
+        )
 
     async def _send_section_done(self, section: str) -> None:
         payload = json.dumps({"action": "section_done", "section": section})
@@ -283,25 +336,18 @@ Checkpoint Behavior:
         )
 
     def _format_section_prompt(self, section: Section) -> str:
-        prompt = f"""
-SECTION: {section.title}
-AGENT GUIDANCE: {section.agent_guidance}
-
-VISUAL DESCRIPTION: {section.visual_description}
-
-EXPLANATION STRATEGY:
-"""
+        prompt = "\n---CONTENT---\n"
+        prompt += f"{section.title}\n\n"
+        prompt += f"[Tone]: {section.agent_guidance}\n\n"
+        prompt += f"[Scene]: {section.visual_description}\n\n"
+        prompt += "[Cover]:\n"
         for i, strategy_point in enumerate(section.explanation_strategy, 1):
             prompt += f"{i}. {strategy_point}\n"
 
         if section.checkpoint:
-            prompt += f"""
-
-CHECKPOINT: {section.checkpoint.id}
-Mandatory: {section.checkpoint.mandatory}
-Question: {section.checkpoint.question}
-Success Criteria: {section.checkpoint.success_criteria}
-"""
+            prompt += "\n"
+            prompt += f"[Ask]: {section.checkpoint.question}\n"
+            prompt += f"[Expected]: {section.checkpoint.success_criteria}\n"
         return prompt
 
     @function_tool(description="Scrolls the user's screen to a specific page number.")
@@ -320,7 +366,9 @@ Success Criteria: {section.checkpoint.success_criteria}
     async def get_explanation_plan(self, topic: str) -> str:
         """Fetches and loads the structured explanation plan for a topic."""
 
-        await self.session.generate_reply(instructions="Tell the user that you are preparing the explanation plan for their chosen topic and will start shortly.")
+        await self.session.generate_reply(
+            instructions="Tell the user that you are preparing the explanation plan for their chosen topic and will start shortly."
+        )
 
         plan_json = await fetch_md_from_bunny(
             f"sanad/{self.course_id}/{self.chapter_id}/{topic}.json"
@@ -332,7 +380,7 @@ Success Criteria: {section.checkpoint.success_criteria}
 
         first_section = self.current_plan.sections[0]
 
-        return f"[SUCCESS] Plan loaded: {self.current_plan.title}. Total sections: {self.current_plan.total_sections}. Goal: {self.current_plan.goal}. First section ID: {first_section.id}."
+        return f"[SUCCESS] Loaded. Goal: {self.current_plan.goal}. Begin with {first_section.id}."
 
     @function_tool(description="Begin explaining a section. You must complete sections in order.")
     async def start_section(self, section_id: str) -> str:
@@ -366,7 +414,7 @@ Success Criteria: {section.checkpoint.success_criteria}
             await self._execute_scroll(section.action.page)
 
         section_prompt = self._format_section_prompt(section)
-        return f"[SUCCESS] Section started: {section.title}.\n{section_prompt}"
+        return f"[SUCCESS]\n{section_prompt}"
 
     @function_tool(
         description="Call this AFTER the student responds to your checkpoint question. Evaluates if they understood."
@@ -388,9 +436,9 @@ Success Criteria: {section.checkpoint.success_criteria}
 
         if student_understood:
             section.checkpoint.completed = True
-            return "[SUCCESS] Checkpoint passed. FIRST provide brief positive reinforcement to the student, acknowledging their correct understanding. THEN call complete_section()."
+            return "[SUCCESS] Checkpoint passed. Acknowledge the student warmly, then continue."
         else:
-            return f"[HINT] Student needs clarification. Use this guidance to re-explain: {section.checkpoint.on_confusion}. After re-explaining, ask the checkpoint question again and wait for the student to respond. Then call checkpoint_passed() again with their new response."
+            return f"[HINT] Re-explain using: {section.checkpoint.on_confusion}. Then ask again and wait."
 
     @function_tool(
         description="Mark the current section as complete. Required before moving to the next section."
@@ -409,15 +457,16 @@ Success Criteria: {section.checkpoint.success_criteria}
 
         if self.current_plan is None:
             return "[ERROR] No plan loaded."
-        
+
         await self._send_section_done(section.title)
 
         if self.current_plan.is_complete:
-            return "[SUCCESS] All sections complete. Plan finished."
+            return (
+                "[SUCCESS] All content covered. Congratulate the student on completing this topic."
+            )
 
         if section.sequence < len(self.current_plan.sections):
             next_section = self.current_plan.sections[section.sequence]
-            return f"[SUCCESS] Section {section_id} completed. Next section ID: {next_section.id}."
-            
+            return f"[SUCCESS] Done. Continue with {next_section.id}."
 
-        return f"[SUCCESS] Section {section_id} completed. All sections finished."
+        return "[SUCCESS] Done. All content covered."

@@ -9,7 +9,6 @@ from tutor_agent import Assistant
 
 from bunny import fetch_md_from_bunny
 
-
 ## Entrypoint for the agent
 
 
@@ -42,12 +41,9 @@ Current Chapter: {chapter_topics_data['chapter']}
 Chapter number: {chapter_topics_data['chapter_number']}
 Chapter id: {chapter_topics_data['chapter_id']}"""
 
-    chapter_topics_schema = "\n".join(
-        f"""{idx + 1}. {topic['name']}: 
+    chapter_topics_schema = "\n".join(f"""{idx + 1}. {topic['name']}: 
         brief: {topic['brief']} 
-        slug: {topic['slug']}"""
-        for idx, topic in enumerate(chapter_topics_data["topics"])
-    )
+        slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
 
     user_info = f"""
     Name: {user_name}
@@ -65,9 +61,9 @@ Chapter id: {chapter_topics_data['chapter_id']}"""
         llm=openai.LLM(model=getenv("LLM_CHOICE", "gpt-5-mini"), temperature=0.3),
         # ElevenLabs TTs
         tts=elevenlabs.TTS(
-            voice_id="pCKbQ4EPGE06zpEPGNvS", # Abdullah - Arabic voice (updated)
+            voice_id="pCKbQ4EPGE06zpEPGNvS",  # Abdullah - Arabic voice (updated)
             model="eleven_flash_v2_5",
-            language=ln_code.get(language, "en")
+            language=ln_code.get(language, "en"),
         ),
         vad=silero.VAD.load(),
     )
