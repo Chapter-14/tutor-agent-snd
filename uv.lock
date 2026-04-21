@@ -1673,6 +1673,19 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-faseeh"
+version = "0.1.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "livekit-agents", extra = ["codecs"] },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/75/cc/9978bcc06f1b9c881c57d4bca6aa42848e5a6686bed02f05bdd55396b4e9/livekit_plugins_faseeh-0.1.5.tar.gz", hash = "sha256:cb9a1d64bcbb89e03ee997e8613a537c7fafcaa48a104cf2724671143753a6ec", size = 12105, upload-time = "2026-02-27T07:37:19.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7f/52/9f2154978788b54b54682c2804af2ceb07eaca554a787ba9d2ecfefdd678/livekit_plugins_faseeh-0.1.5-py3-none-any.whl", hash = "sha256:8b4d830e84d53b636cacffb55c3e8bfb0839c8d66ba466c0e107725d510540e5", size = 13906, upload-time = "2026-02-27T07:37:18.81Z" },
+]
+
+[[package]]
 name = "livekit-plugins-google"
 version = "1.4.4"
 source = { registry = "https://pypi.org/simple" }
@@ -3684,6 +3697,7 @@ dependencies = [
     { name = "livekit-agents", extra = ["cartesia", "elevenlabs", "mcp"] },
     { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
+    { name = "livekit-plugins-faseeh" },
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
     { name = "livekit-plugins-turn-detector" },
@@ -3749,6 +3763,7 @@ requires-dist = [
     { name = "livekit-plugins-elevenlabs", specifier = ">=1.2.14" },
     { name = "livekit-plugins-elevenlabs", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-elevenlabs", marker = "extra == 'tts'", specifier = ">=1.0.0" },
+    { name = "livekit-plugins-faseeh", specifier = ">=0.1.5" },
     { name = "livekit-plugins-google", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-google", marker = "extra == 'llm'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-groq", marker = "extra == 'all'", specifier = ">=1.0.0" },

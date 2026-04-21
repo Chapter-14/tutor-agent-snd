@@ -3,7 +3,7 @@ from os import getenv
 
 from livekit import agents
 from livekit.agents import AgentSession
-from livekit.plugins import openai, silero, elevenlabs
+from livekit.plugins import openai, silero, elevenlabs, faseeh
 
 from tutor_agent import Assistant
 
@@ -25,7 +25,7 @@ async def entrypoint(ctx: agents.JobContext):
     # Extract the attributes we set in the frontend
     course_id = participant.attributes.get("course_id", "phys_1040")
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "Arabic")
+    language = participant.attributes.get("language", "English")
     user_name = participant.attributes.get("user_name", "undefined")
 
     # Fetch chapter content from Bunny Storage
@@ -89,7 +89,7 @@ Chapter id: {chapter_topics_data['chapter_id']}"""
 
     # Generate initial greeting with chapter overview
     await session.generate_reply(
-        instructions="""Start by greeting the user and introducing yourself as their private AI tutor. Then provide an overview of the chapter topics. Then ask the user to choose a topic to explore. Do not call get_explanation_plan until the user replies with their chosen topic."""
+        instructions="""Start by greeting the user and introducing yourself very briefly as their private AI tutor. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question. Do not call get_explanation_plan until the user replies with their chosen topic."""
     )
 
 
