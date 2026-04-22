@@ -5,7 +5,7 @@ import time
 
 from livekit import agents
 from livekit.agents import AgentSession
-from livekit.plugins import openai, silero, elevenlabs, faseeh
+from livekit.plugins import openai, silero, elevenlabs, faseeh, cartesia
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
 
@@ -46,18 +46,28 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Parse the chapter topics schema
     chapter_topics_data = json.loads(chapter_topics_schema_raw)
+    chapter_topics_schema = "\n".join(f"""{idx + 1}. Name: {topic['name']}, slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
 
-    chapter_meta_data = f"""
+    dynamic_prompt = f"""
+# USER INFO (Use this to personalize your responses)
+Name: {user_name}
+
+# COURSE META INFORMATION
+Use this to understand the overall course structure.
+{course_meta_data}
+
+# Current Chapter Information
+A basic information about the current chapter.
 Current Chapter: {chapter_topics_data['chapter']}
 Chapter number: {chapter_topics_data['chapter_number']}
-Chapter id: {chapter_topics_data['chapter_id']}"""
+Chapter id: {chapter_topics_data['chapter_id']}
 
-    chapter_topics_schema = " ".join(f"""Topic: {idx + 1}. {topic['name']}, 
-slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
+# Chapter topics. Each topic includes a slug key. Use this list to map the user's natural-language request to the correct slug, then pass that slug to get_explanation_plan(topic).
+{chapter_topics_schema}
 
-    user_info = f"""
-    Name: {user_name}
-    """
+# Output Language:
+All your responses must be in {language}.
+"""
 
     # Langauge code mapping for TTS
     ln_code = {
@@ -67,13 +77,20 @@ slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics
 
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
-        stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
+        # stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
+        stt=cartesia.STT(model="ink-whisper", language=ln_code.get(language, "en")),
         llm=openai.LLM(model=getenv("LLM_CHOICE", "gpt-5-mini"), temperature=0.3),
         # ElevenLabs TTs
-        tts=elevenlabs.TTS(
-            voice_id="pCKbQ4EPGE06zpEPGNvS",  # Abdullah - Arabic voice (updated)
-            model="eleven_flash_v2_5",
-            language=ln_code.get(language, "en"),
+        # tts=elevenlabs.TTS(
+        #     voice_id="pCKbQ4EPGE06zpEPGNvS",  # Abdullah - Arabic voice (updated)
+        #     model="eleven_flash_v2_5",
+        #     language=ln_code.get(language, "en"),
+        # ),
+        # Cartesia TTs
+        tts=cartesia.TTS(
+        model="sonic-3",
+        voice="3e39e9a5-585c-4f5f-bac6-5e4905c51095",
+        language=ln_code.get(language, "en")
         ),
         vad=silero.VAD.load(),
         turn_detection=MultilingualModel(),
@@ -113,13 +130,9 @@ slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics
         room=ctx.room,
         agent=Assistant(
             ctx,
-            course_meta_data=course_meta_data,
-            chapter_meta_data=chapter_meta_data,
-            language=language,
-            user_info=user_info,
             course_id=course_id,
             chapter_id=chapter_id,
-            topics_list=chapter_topics_schema,
+            dynamic_prompt=dynamic_prompt,
         ),
     )
 
