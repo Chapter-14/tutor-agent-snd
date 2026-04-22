@@ -1541,6 +1541,9 @@ mcp = [
 openai = [
     { name = "livekit-plugins-openai" },
 ]
+turn-detector = [
+    { name = "livekit-plugins-turn-detector" },
+]
 
 [[package]]
 name = "livekit-api"
@@ -3694,7 +3697,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "httpx" },
-    { name = "livekit-agents", extra = ["cartesia", "elevenlabs", "mcp"] },
+    { name = "livekit-agents", extra = ["cartesia", "elevenlabs", "mcp", "turn-detector"] },
     { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
     { name = "livekit-plugins-faseeh" },
@@ -3750,7 +3753,7 @@ dev = [
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "livekit-agents", extras = ["cartesia", "elevenlabs", "mcp"], specifier = "~=1.4" },
+    { name = "livekit-agents", extras = ["cartesia", "elevenlabs", "mcp", "turn-detector"], specifier = "~=1.4" },
     { name = "livekit-plugins-anthropic", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-anthropic", marker = "extra == 'llm'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-assemblyai", marker = "extra == 'all'", specifier = ">=1.0.0" },

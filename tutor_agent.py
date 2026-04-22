@@ -78,7 +78,6 @@ class Assistant(Agent):
         course_id: str,
         chapter_id: str,
         topics_list: str,
-        chat_ctx=None,
     ):
         self.job_ctx = job_ctx
         self.course_id = course_id
@@ -241,7 +240,13 @@ Checkpoint Behavior:
 - If the student is confused (student_understood=False), you will receive private guidance on how to explain differently. Absorb it silently, re-explain naturally, then ask the question again and wait. Repeat until the student understands.
 - If the student understood (student_understood=True), warmly acknowledge their correct answer BEFORE doing anything else. Do not rush to the next step.
 """,
-            chat_ctx=chat_ctx,
+        )
+
+    async def on_enter(self):
+        await self.session.generate_reply(
+            instructions="""Start by greeting the user and introducing yourself very briefly as their private AI tutor.
+            Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question.
+            Do not call get_explanation_plan until the user replies with their chosen topic."""
         )
 
     def _get_section_by_id(self, section_id: str) -> Section | None:

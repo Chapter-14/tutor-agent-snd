@@ -1,13 +1,19 @@
 import json
+import logging
 from os import getenv
+import time
 
 from livekit import agents
 from livekit.agents import AgentSession
 from livekit.plugins import openai, silero, elevenlabs, faseeh
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
 
 from tutor_agent import Assistant
 
 from bunny import fetch_md_from_bunny
+
+logger = logging.getLogger(__name__)
 
 ## Entrypoint for the agent
 
@@ -22,10 +28,15 @@ async def entrypoint(ctx: agents.JobContext):
     participant = await ctx.wait_for_participant()
 
     # Extract the attributes we set in the frontend
-    course_id = participant.attributes.get("course_id", "phys_1040")
-    chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language = participant.attributes.get("language", "English")
-    user_name = participant.attributes.get("user_name", "undefined")
+    # course_id = participant.attributes.get("course_id", "phys_1040")
+    # chapter_id = participant.attributes.get("chapter_id", "ch_1")
+    # language = participant.attributes.get("language", "English")
+    # user_name = participant.attributes.get("user_name", "undefined")
+
+    course_id = "phys_1040"
+    chapter_id = "ch_1"
+    language = "English"
+    user_name = "Moaz"
 
     # Fetch chapter content from Bunny Storage
     course_meta_data = await fetch_md_from_bunny(f"courses/{course_id}/01_Course_Knowledge_Schema.md")
@@ -41,9 +52,8 @@ Current Chapter: {chapter_topics_data['chapter']}
 Chapter number: {chapter_topics_data['chapter_number']}
 Chapter id: {chapter_topics_data['chapter_id']}"""
 
-    chapter_topics_schema = "\n".join(f"""{idx + 1}. {topic['name']}: 
-        brief: {topic['brief']} 
-        slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
+    chapter_topics_schema = " ".join(f"""Topic: {idx + 1}. {topic['name']}, 
+slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
 
     user_info = f"""
     Name: {user_name}
@@ -66,7 +76,37 @@ Chapter id: {chapter_topics_data['chapter_id']}"""
             language=ln_code.get(language, "en"),
         ),
         vad=silero.VAD.load(),
+        turn_detection=MultilingualModel(),
     )
+
+    # Local observers for metrics and agent state changes
+
+    usage_collector = metrics.UsageCollector()
+    last_eou_metrics: metrics.EOUMetrics | None = None
+
+    @session.on("metrics_collected")
+    def _on_metrics_collected(ev: MetricsCollectedEvent):
+        nonlocal last_eou_metrics
+        if ev.metrics.type == "eou_metrics":
+            last_eou_metrics = ev.metrics
+
+        metrics.log_metrics(ev.metrics)
+        usage_collector.collect(ev.metrics)
+
+
+    async def log_usage():
+        summary = usage_collector.get_summary()
+        logger.info("Usage summary: %s", summary)
+
+
+    ctx.add_shutdown_callback(log_usage)
+    
+    @session.on("agent_state_changed")
+    def _on_agent_state_changed(ev: AgentStateChangedEvent):
+        if (ev.new_state == "speaking"):
+            if last_eou_metrics:
+                delta = time.time() - last_eou_metrics.timestamp
+                logger.info(f"Time to first audio: {delta:.2f} seconds")
 
     # Start the session
     await session.start(
@@ -81,11 +121,6 @@ Chapter id: {chapter_topics_data['chapter_id']}"""
             chapter_id=chapter_id,
             topics_list=chapter_topics_schema,
         ),
-    )
-
-    # Generate initial greeting with chapter overview
-    await session.generate_reply(
-        instructions="""Start by greeting the user and introducing yourself very briefly as their private AI tutor. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question. Do not call get_explanation_plan until the user replies with their chosen topic."""
     )
 
 
