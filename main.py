@@ -4,6 +4,7 @@ from os import getenv
 import time
 
 from livekit import agents
+from setup_langfuse import setup_langfuse
 from livekit.agents import AgentSession
 from livekit.plugins import openai, silero, elevenlabs, faseeh, cartesia
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
@@ -98,32 +99,47 @@ All your responses must be in {language}.
 
     # Local observers for metrics and agent state changes
 
-    usage_collector = metrics.UsageCollector()
-    last_eou_metrics: metrics.EOUMetrics | None = None
+    # usage_collector = metrics.UsageCollector()
+    # last_eou_metrics: metrics.EOUMetrics | None = None
+
+    # @session.on("metrics_collected")
+    # def _on_metrics_collected(ev: MetricsCollectedEvent):
+    #     nonlocal last_eou_metrics
+    #     if ev.metrics.type == "eou_metrics":
+    #         last_eou_metrics = ev.metrics
+
+    #     metrics.log_metrics(ev.metrics)
+    #     usage_collector.collect(ev.metrics)
+
+
+    # async def log_usage():
+    #     summary = usage_collector.get_summary()
+    #     logger.info("Usage summary: %s", summary)
+
+
+    # ctx.add_shutdown_callback(log_usage)
+    
+    # @session.on("agent_state_changed")
+    # def _on_agent_state_changed(ev: AgentStateChangedEvent):
+    #     if (ev.new_state == "speaking"):
+    #         if last_eou_metrics:
+    #             delta = time.time() - last_eou_metrics.timestamp
+    #             logger.info(f"Time to first audio: {delta:.2f} seconds")
+
+    trace_provider = setup_langfuse(
+        metadata={
+            "langfuse.session.id": ctx.room.name,
+        }
+    )
+
+    async def flush_trace():
+        trace_provider.force_flush()
+
+    ctx.add_shutdown_callback(flush_trace)
 
     @session.on("metrics_collected")
     def _on_metrics_collected(ev: MetricsCollectedEvent):
-        nonlocal last_eou_metrics
-        if ev.metrics.type == "eou_metrics":
-            last_eou_metrics = ev.metrics
-
         metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
-
-
-    async def log_usage():
-        summary = usage_collector.get_summary()
-        logger.info("Usage summary: %s", summary)
-
-
-    ctx.add_shutdown_callback(log_usage)
-    
-    @session.on("agent_state_changed")
-    def _on_agent_state_changed(ev: AgentStateChangedEvent):
-        if (ev.new_state == "speaking"):
-            if last_eou_metrics:
-                delta = time.time() - last_eou_metrics.timestamp
-                logger.info(f"Time to first audio: {delta:.2f} seconds")
 
     # Start the session
     await session.start(
