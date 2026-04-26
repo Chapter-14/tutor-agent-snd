@@ -5,7 +5,7 @@ description = "Voice AI agent built with LiveKit Agents framework"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "livekit-agents[cartesia,elevenlabs,mcp,turn-detector]~=1.4",
+    "livekit-agents[cartesia,cerebras,elevenlabs,groq,mcp,turn-detector]~=1.5",
     "livekit-plugins-openai>=1.0.0",
     "livekit-plugins-deepgram>=1.0.0",
     "livekit-plugins-silero>=1.0.0",
@@ -16,7 +16,11 @@ dependencies = [
     "livekit-plugins-faseeh>=0.1.5",
     "langfuse>=4.5.0",
     "opentelemetry-sdk>=1.39.1",
+    "livekit-plugins-noise-cancellation~=0.2",
 ]
+
+[project.scripts]
+tutor-agent = "tutor_agent_snd.main:main"
 
 [project.optional-dependencies]
 # Additional TTS providers
@@ -88,3 +92,10 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.4",
 ]
+
+[build-system]
+requires = ["hatchling>=1.24.0"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true

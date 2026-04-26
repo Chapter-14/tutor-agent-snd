@@ -1,23 +1,20 @@
 import json
 import logging
 from os import getenv
-import time
-
+from datetime import datetime
 from livekit import agents
-from setup_langfuse import setup_langfuse
-from livekit.agents import AgentSession
-from livekit.plugins import openai, silero, elevenlabs, faseeh, cartesia
+from livekit.agents import AgentSession, MetricsCollectedEvent, RoomInputOptions, metrics
+from livekit.agents.telemetry import set_tracer_provider
+from livekit.plugins import openai, silero, groq, cerebras, elevenlabs, cartesia, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
-from livekit.agents import AgentStateChangedEvent, MetricsCollectedEvent, metrics
 
-from tutor_agent import Assistant
-
-from bunny import fetch_md_from_bunny
+from tutor_agent_snd.lib.bunny import fetch_md_from_bunny
+from tutor_agent_snd.lib.setup_langfuse import setup_langfuse
+from tutor_agent_snd.agents.tutor_agent import Assistant
 
 logger = logging.getLogger(__name__)
 
 ## Entrypoint for the agent
-
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
@@ -25,29 +22,33 @@ async def entrypoint(ctx: agents.JobContext):
     # Auto-connect to room (dev mode)
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.SUBSCRIBE_ALL)
 
-    # Wait for the first human participant to arrive
-    participant = await ctx.wait_for_participant()
+    # Wait for the first human participant to arrive and Extract the attributes we set in the frontend
+    # participant = await ctx.wait_for_participant()
 
-    # Extract the attributes we set in the frontend
     # course_id = participant.attributes.get("course_id", "phys_1040")
     # chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    # language = participant.attributes.get("language", "English")
+    # language = participant.attributes.get("language", "Arabic")
     # user_name = participant.attributes.get("user_name", "undefined")
 
     course_id = "phys_1040"
     chapter_id = "ch_1"
-    language = "English"
-    user_name = "Moaz"
+    language = "Arabic"
+    user_name = "Moaz Abdelaziz"
 
     # Fetch chapter content from Bunny Storage
-    course_meta_data = await fetch_md_from_bunny(f"courses/{course_id}/01_Course_Knowledge_Schema.md")
+    course_meta_data = await fetch_md_from_bunny(
+        f"courses/{course_id}/01_Course_Knowledge_Schema.md"
+    )
     chapter_topics_schema_raw = await fetch_md_from_bunny(
         f"courses/{course_id}/{chapter_id}/topics_list.json"
     )
 
     # Parse the chapter topics schema
     chapter_topics_data = json.loads(chapter_topics_schema_raw)
-    chapter_topics_schema = "\n".join(f"""{idx + 1}. Name: {topic['name']}, slug: {topic['slug']}""" for idx, topic in enumerate(chapter_topics_data["topics"]))
+    chapter_topics_schema = "\n".join(
+        f"""{idx + 1}. Name: {topic['name']}, slug: {topic['slug']}"""
+        for idx, topic in enumerate(chapter_topics_data["topics"])
+    )
 
     dynamic_prompt = f"""
 # USER INFO (Use this to personalize your responses)
@@ -78,9 +79,8 @@ All your responses must be in {language}.
 
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
-        # stt=openai.STT(model="gpt-4o-transcribe", language=ln_code.get(language, "en")),
         stt=cartesia.STT(model="ink-whisper", language=ln_code.get(language, "en")),
-        llm=openai.LLM(model=getenv("LLM_CHOICE", "gpt-5-mini"), temperature=0.3),
+        llm=cerebras.LLM(model="gpt-oss-120b", temperature=0.3),
         # ElevenLabs TTs
         # tts=elevenlabs.TTS(
         #     voice_id="pCKbQ4EPGE06zpEPGNvS",  # Abdullah - Arabic voice (updated)
@@ -88,48 +88,35 @@ All your responses must be in {language}.
         #     language=ln_code.get(language, "en"),
         # ),
         # Cartesia TTs
-        tts=cartesia.TTS(
-        model="sonic-3",
-        voice="3e39e9a5-585c-4f5f-bac6-5e4905c51095",
-        language=ln_code.get(language, "en")
-        ),
+        # tts=cartesia.TTS(
+        #     model="sonic-3",
+        #     # voice="3e39e9a5-585c-4f5f-bac6-5e4905c51095", # ِArabic voice
+        #     voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e", # ُِEnglish voice
+        #     language=ln_code.get(language, "en"),
+        # ),
+        tts=openai.TTS(model="tts-1"),
         vad=silero.VAD.load(),
         turn_detection=MultilingualModel(),
     )
-
-    # Local observers for metrics and agent state changes
-
-    # usage_collector = metrics.UsageCollector()
-    # last_eou_metrics: metrics.EOUMetrics | None = None
-
-    # @session.on("metrics_collected")
-    # def _on_metrics_collected(ev: MetricsCollectedEvent):
-    #     nonlocal last_eou_metrics
-    #     if ev.metrics.type == "eou_metrics":
-    #         last_eou_metrics = ev.metrics
-
-    #     metrics.log_metrics(ev.metrics)
-    #     usage_collector.collect(ev.metrics)
-
-
-    # async def log_usage():
-    #     summary = usage_collector.get_summary()
-    #     logger.info("Usage summary: %s", summary)
-
-
-    # ctx.add_shutdown_callback(log_usage)
     
-    # @session.on("agent_state_changed")
-    # def _on_agent_state_changed(ev: AgentStateChangedEvent):
-    #     if (ev.new_state == "speaking"):
-    #         if last_eou_metrics:
-    #             delta = time.time() - last_eou_metrics.timestamp
-    #             logger.info(f"Time to first audio: {delta:.2f} seconds")
+    # Langfuse observability setup
+    session_id = f"{ctx.room.name}-{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}" # remove in production. and use ctx.room.name .
 
-    trace_provider = setup_langfuse(
+    trace_provider, langfuse = setup_langfuse(
         metadata={
-            "langfuse.session.id": ctx.room.name,
+            "langfuse.session.id": session_id,
+            # "langfuse.session.id": ctx.room.name,
         }
+    )
+
+    system_prompt_obj = langfuse.get_prompt("snd-agent-system-prompt", label="latest")
+
+    set_tracer_provider(
+        trace_provider,
+        metadata={
+            "langfuse.observation.prompt.name": system_prompt_obj.name,
+            "langfuse.observation.prompt.version": system_prompt_obj.version,
+        },
     )
 
     async def flush_trace():
@@ -149,10 +136,14 @@ All your responses must be in {language}.
             course_id=course_id,
             chapter_id=chapter_id,
             dynamic_prompt=dynamic_prompt,
+            system_prompt=system_prompt_obj.prompt,
         ),
+        room_input_options=RoomInputOptions(
+            noise_cancellation=noise_cancellation.BVC(),
+        ),  
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
     # Run the agent
     agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))

@@ -12,7 +12,7 @@ A LiveKit-powered voice AI agent framework that demonstrates how to build realti
 
 ## Prerequisites
 
-- Python 3.9 or later
+- Python 3.10 or later
 - API Keys:
   - OpenAI API key
   - Deepgram API key
@@ -51,22 +51,22 @@ cp .env.example .env
 Before first run, download the required model files (Silero VAD, turn detector):
 
 ```bash
-# Download model files for basic agent
-uv run python main.py download-files
+# Download model files
+uv run tutor-agent download-files
 
 ```
 
 ### 4. Run the Agent
 
 ```bash
-# Basic agent (minimal configuration)
-uv run python main.py console
+# Console mode (test locally without LiveKit server)
+uv run tutor-agent console
 
 # Development mode (connects to LiveKit - optional)
-uv run python main.py dev
+uv run tutor-agent dev
 
 # Production mode
-uv run python main.py start
+uv run tutor-agent start
 ```
 
 ## Architecture
@@ -85,26 +85,44 @@ uv run python main.py start
               └──────────┘  └──────────┘
 ```
 
-## Project Files
+## Project Structure
 
-### Basic Agent
+The project now uses a `src/` package layout.
 
-**`main.py`** - The simplest possible LiveKit voice agent
+```text
+tutor-agent-snd/
+├── AGENTS.md
+├── Dockerfile
+├── livekit.toml
+├── pyproject.toml
+├── README.md
+├── contexts/
+│   ├── GEMINI.md
+│   ├── material/
+│   ├── output/
+│   └── prompts/
+├── docs/
+│   ├── architecture.md
+│   ├── data-models.md
+│   └── explanation-plan-execution.md
+└── src/
+  └── tutor_agent_snd/
+    ├── __init__.py
+    ├── __main__.py
+    ├── main.py
+    ├── agents/
+    │   └── tutor_agent.py
+    └── lib/
+      ├── bunny.py
+      └── setup_langfuse.py
+```
 
-- Minimal configuration with only essential components
-- Great for learning and testing basic functionality
-- Requires only OpenAI and Deepgram API keys
-- Includes example tool: `get_current_date_and_time`
+### Important Files
 
-### MCP Agent
-
-**`main.py`** - Full-featured voice agent with:
-
-- Configurable speech-to-text, LLM, and text-to-speech providers
-- MCP server integration for tool calling
-- Multilingual turn detection
-- Event handling and state management
-- Logging and metrics support
+- `src/tutor_agent_snd/main.py`: LiveKit worker entrypoint and pipeline setup.
+- `src/tutor_agent_snd/agents/tutor_agent.py`: Tutor agent tools, plan flow, and UI-control publishing.
+- `src/tutor_agent_snd/lib/bunny.py`: Bunny Storage fetch helpers.
+- `src/tutor_agent_snd/lib/setup_langfuse.py`: Langfuse tracing setup.
 
 ## Voice Pipeline Configuration
 
@@ -215,7 +233,7 @@ This will write your LiveKit credentials to `.env.local`
 Run your agent connected to LiveKit Cloud:
 
 ```bash
-uv run python main.py start
+uv run tutor-agent start
 ```
 
 ### 6. Create an Agent in LiveKit Cloud
@@ -236,7 +254,7 @@ Console mode lets you test your agent locally without needing a LiveKit server:
 
 ```bash
 # Run agent in dev mode
-uv run python main.py dev
+uv run tutor-agent dev
 ```
 
 This will start an interactive console where you can speak to your agent using your microphone and speakers.
@@ -245,7 +263,7 @@ This will start an interactive console where you can speak to your agent using y
 
 ### Python Version
 
-Ensure you're using Python 3.9 or later:
+Ensure you're using Python 3.10 or later:
 
 ```bash
 python --version
