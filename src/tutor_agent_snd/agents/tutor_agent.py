@@ -1,16 +1,13 @@
 import json
 
-from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import Agent
 from livekit.agents.llm import function_tool
 
 from tutor_agent_snd.domain_types import ExplanationPlan, Section
-from tutor_agent_snd.lib.bunny import fetch_md_from_bunny
-from tutor_agent_snd.lib.plan_helpers import format_section_prompt, parse_plan
+from tutor_agent_snd.util.bunny import fetch_md_from_bunny
+from tutor_agent_snd.util.plan_helpers import format_section_prompt, parse_plan
 
-# Load environment variables
-load_dotenv(".env")
 
 
 ## Main Agent Definition
@@ -36,7 +33,7 @@ class Assistant(Agent):
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions="""Great the user by name. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question."""
+            instructions="""Great the user by their name. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question."""
         )
 
     # Frontend communication helpers
@@ -95,16 +92,6 @@ class Assistant(Agent):
 
     # Agent tools
 
-    @function_tool(description="Scrolls the user's screen to a specific page number.")
-    async def scroll_to_page(self, page_number: int) -> str:
-        """Scrolls the user's screen to a specific page number.
-
-        Args:
-            page_number: The page number to scroll to (1-36).
-        """
-        await self._execute_scroll(page_number)
-        return f"[SUCCESS] Scrolled to page {page_number}."
-
     @function_tool(
         description="""Fetch the explanation plan for a topic. Only use after the user explicitly states what they want to study in the current session."""
     )
@@ -153,7 +140,8 @@ class Assistant(Agent):
         section.started = True
         self.current_plan.current_section_index = section.sequence - 1
         await self._send_current_section(section.title)
-        await self._send_section_checkpoint(self.current_plan.current_section.checkpoint.question)
+        if self.current_plan.current_section.checkpoint:
+            await self._send_section_checkpoint(self.current_plan.current_section.checkpoint.question)
 
         if section.action and section.action.type == "scroll" and section.action.page:
             await self._execute_scroll(section.action.page)
@@ -181,6 +169,7 @@ class Assistant(Agent):
 
         if student_understood:
             section.checkpoint.completed = True
+            section.completed = True
             await self._send_section_done(section.title)
 
             if section.sequence < len(self.current_plan.sections):

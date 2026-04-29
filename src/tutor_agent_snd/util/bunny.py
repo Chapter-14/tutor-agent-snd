@@ -1,9 +1,6 @@
 import os
-
 import httpx
-from dotenv import load_dotenv
 
-load_dotenv()
 
 BUNNY_STORAGE_ZONE = os.getenv("BUNNY_STORAGE_ZONE")
 BUNNY_API_KEY = os.getenv("BUNNY_STORAGE_API_KEY")
