@@ -5,8 +5,8 @@ from livekit.agents import Agent
 from livekit.agents.llm import function_tool
 
 from tutor_agent_snd.domain_types import ExplanationPlan, Section
-from tutor_agent_snd.util.bunny import fetch_md_from_bunny
-from tutor_agent_snd.util.plan_helpers import format_section_prompt, parse_plan
+from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
+from tutor_agent_snd.utils.plan_helpers import format_section_prompt, parse_plan
 
 
 

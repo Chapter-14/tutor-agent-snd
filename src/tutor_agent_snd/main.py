@@ -4,16 +4,15 @@ from dotenv import load_dotenv
 
 load_dotenv(".env")
 
-import json
 import logging
 from livekit import agents
 from livekit.agents.telemetry import set_tracer_provider
 from livekit.plugins import openai, silero, groq, cerebras, elevenlabs, cartesia, noise_cancellation, deepgram
 from livekit.agents import AgentSession, room_io, TurnHandlingOptions
 
-from tutor_agent_snd.util.setup_langfuse import setup_langfuse
+from tutor_agent_snd.utils.setup_langfuse import setup_langfuse
 from tutor_agent_snd.agents.tutor_agent import Assistant
-from tutor_agent_snd.util.parse_dynamic_prompt import parse_d_prompt
+from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -26,19 +25,18 @@ async def entrypoint(ctx: agents.JobContext):
     # Auto-connect to room ``
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
 
-    # Try to get user context from job metadata (set by frontend dispatch)
-    try:
-        metadata = json.loads(ctx.job.metadata)
-        user_name  = metadata.get("user_name", "Student")
-        course_id  = metadata.get("course_id", "phys_1040")
-        chapter_id = metadata.get("chapter_id", "ch_1")
-        language   = metadata.get("language", "English")
-    except (json.JSONDecodeError, TypeError):
-        # Console mode or no metadata — use defaults
-        user_name  = "Student"
-        course_id  = "phys_1040"
-        chapter_id = "ch_1"
-        language   = "English"
+    participant = await ctx.wait_for_participant()
+    course_id  = participant.attributes.get("course_id", "phys_1040")
+    chapter_id = participant.attributes.get("chapter_id", "ch_1")
+    language   = participant.attributes.get("language", "Arabic")
+    user_name  = participant.attributes.get("user_name", "undefined")
+    
+    
+    # Console mode or no metadata — use defaults
+    # user_name  = "Student"
+    # course_id  = "phys_1040"
+    # chapter_id = "ch_1"
+    # language   = "English"
 
     dynamic_prompt = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
@@ -65,7 +63,7 @@ async def entrypoint(ctx: agents.JobContext):
     # c_tts = openai.TTS(model="tts-1")
 
     tts_with_fallback = agents.tts.FallbackAdapter(
-        tts=[p_tts, f_tts],   # order matters: first is primary
+        tts=[f_tts, p_tts],   # order matters: first is primary
         max_retry_per_tts=1,             # tune retries before switching
     )
 
@@ -75,7 +73,7 @@ async def entrypoint(ctx: agents.JobContext):
     c_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
-        llm=[p_llm, c_llm],
+        llm=[c_llm, p_llm],
         max_retry_per_llm=1,
     )
 
@@ -122,7 +120,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def flush_trace():
         for usage in session.usage.model_usage:
-            print(f"{usage.provider}/{usage.model}: {usage}")
+            print(f"\n{usage.provider}/{usage.model}: {usage}\n")
         trace_provider.force_flush()
 
     ctx.add_shutdown_callback(flush_trace)
@@ -145,6 +143,7 @@ async def entrypoint(ctx: agents.JobContext):
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=noise_cancellation.BVC(),
+                text_output=False,
             )
         ),  
     )
@@ -152,4 +151,4 @@ async def entrypoint(ctx: agents.JobContext):
 
 def main() -> None:
     # Run the agent
-    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint, agent_name="tutor-agent-prd"))
+    agents.cli.run_app(agents.WorkerOptions(entrypoint_fnc=entrypoint))

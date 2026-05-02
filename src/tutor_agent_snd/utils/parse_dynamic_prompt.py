@@ -1,6 +1,6 @@
 import json
 
-from tutor_agent_snd.util.bunny import fetch_md_from_bunny
+from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
 
 async def parse_d_prompt(user_name: str, course_id: str, chapter_id: str, language: str) -> str:
     # Fetch chapter content from Bunny Storage
