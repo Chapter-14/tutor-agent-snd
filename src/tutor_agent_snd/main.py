@@ -6,18 +6,29 @@ load_dotenv(".env")
 
 import logging
 from livekit import agents
-from livekit.agents.telemetry import set_tracer_provider
-from livekit.plugins import openai, silero, groq, cerebras, elevenlabs, cartesia, noise_cancellation, deepgram
+from livekit.plugins import (
+    openai,
+    silero,
+    groq,
+    cerebras,
+    elevenlabs,
+    cartesia,
+    noise_cancellation,
+    deepgram,
+)
 from livekit.agents import AgentSession, room_io, TurnHandlingOptions
+from livekit.agents.voice.events import MetricsCollectedEvent
+from livekit.agents.telemetry import set_tracer_provider
 
-from tutor_agent_snd.utils.setup_langfuse import setup_langfuse
+
+from tutor_agent_snd.utils.setup_langfuse import setup_langfuse, collect_custom_metrics
 from tutor_agent_snd.agents.tutor_agent import Assistant
 from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
-
 
 logger = logging.getLogger(__name__)
 
 ## Entrypoint for the agent
+
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
@@ -25,18 +36,17 @@ async def entrypoint(ctx: agents.JobContext):
     # Auto-connect to room ``
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
 
-    participant = await ctx.wait_for_participant()
-    course_id  = participant.attributes.get("course_id", "phys_1040")
-    chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language   = participant.attributes.get("language", "Arabic")
-    user_name  = participant.attributes.get("user_name", "undefined")
-    
-    
+    # participant = await ctx.wait_for_participant()
+    # course_id  = participant.attributes.get("course_id", "phys_1040")
+    # chapter_id = participant.attributes.get("chapter_id", "ch_1")
+    # language   = participant.attributes.get("language", "Arabic")
+    # user_name  = participant.attributes.get("user_name", "undefined")
+
     # Console mode or no metadata — use defaults
-    # user_name  = "Student"
-    # course_id  = "phys_1040"
-    # chapter_id = "ch_1"
-    # language   = "English"
+    user_name = "Student"
+    course_id = "phys_1040"
+    chapter_id = "ch_1"
+    language = "English"
 
     dynamic_prompt = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
@@ -56,18 +66,18 @@ async def entrypoint(ctx: agents.JobContext):
     f_tts = cartesia.TTS(
         model="sonic-3",
         # voice="3e39e9a5-585c-4f5f-bac6-5e4905c51095", # ِArabic voice
-        voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e", # ُِEnglish voice
+        voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e",  # ُِEnglish voice
         language=ln_code.get(language, "en"),
     )
 
     # c_tts = openai.TTS(model="tts-1")
 
     tts_with_fallback = agents.tts.FallbackAdapter(
-        tts=[f_tts, p_tts],   # order matters: first is primary
-        max_retry_per_tts=1,             # tune retries before switching
+        tts=[f_tts, p_tts],  # order matters: first is primary
+        max_retry_per_tts=1,  # tune retries before switching
     )
 
-    # LLM setup with fallback mechanism 
+    # LLM setup with fallback mechanism
     p_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
     f_llm = cerebras.LLM(model="qwen-3-235b-a22b-instruct-2507", temperature=0.3)
     c_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
@@ -84,7 +94,7 @@ async def entrypoint(ctx: agents.JobContext):
         tts=tts_with_fallback,
         vad=silero.VAD.load(),
         turn_handling=TurnHandlingOptions(
-            turn_detection="vad",
+            turn_detection="stt",
             endpointing={
                 "mode": "fixed",
                 "min_delay": 0.5,
@@ -95,12 +105,19 @@ async def entrypoint(ctx: agents.JobContext):
                 "min_duration": 0.5,
                 "resume_false_interruption": True,
             },
+            preemptive_generation={"enabled": False},
         ),
     )
-    
-    # Langfuse observability setup
+
+    def on_tts_availability_changed(ev: agents.tts.AvailabilityChangedEvent) -> None:
+        logger.warning("TTS %s available=%s", ev.tts.label, ev.available)
+
+    tts_with_fallback.on("tts_availability_changed", on_tts_availability_changed)
+
+
+    # Langfuse and Custom Metrics Collection
     entropy = random.randint(10000, 99999)
-    session_id = f"{ctx.room.name}_{entropy}" # remove in production. and use ctx.room.name .
+    session_id = f"{ctx.room.name}_{entropy}"  # remove in production. and use ctx.room.name .
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
@@ -125,10 +142,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     ctx.add_shutdown_callback(flush_trace)
 
-    def on_tts_availability_changed(ev: agents.tts.AvailabilityChangedEvent) -> None:
-        logger.warning("TTS %s available=%s", ev.tts.label, ev.available)
-
-    tts_with_fallback.on("tts_availability_changed", on_tts_availability_changed)
+    # Custom Metrics Collection    
+    @session.on("metrics_collected")
+    def on_metrics_collected(ev: MetricsCollectedEvent) -> None:
+        collect_custom_metrics(ev)
 
     # Start the session
     await session.start(
@@ -143,9 +160,9 @@ async def entrypoint(ctx: agents.JobContext):
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=noise_cancellation.BVC(),
-                text_output=False,
-            )
-        ),  
+            ),
+            text_output=False,
+        ),
     )
 
 
