@@ -1,4 +1,5 @@
 import random
+import time
 
 from dotenv import load_dotenv
 
@@ -8,6 +9,7 @@ import logging
 from livekit import agents
 from livekit.plugins import (
     openai,
+    groq,
     silero,
     groq,
     cerebras,
@@ -21,7 +23,7 @@ from livekit.agents.voice.events import MetricsCollectedEvent
 from livekit.agents.telemetry import set_tracer_provider
 
 
-from tutor_agent_snd.utils.setup_langfuse import setup_langfuse, collect_custom_metrics
+from tutor_agent_snd.utils.agent_observation import setup_langfuse, collect_custom_metrics, calculate_cost
 from tutor_agent_snd.agents.tutor_agent import Assistant
 from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
@@ -32,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
+    session_start_time = time.time()
 
     # Auto-connect to room ``
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
@@ -79,11 +82,11 @@ async def entrypoint(ctx: agents.JobContext):
 
     # LLM setup with fallback mechanism
     p_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
-    f_llm = cerebras.LLM(model="qwen-3-235b-a22b-instruct-2507", temperature=0.3)
-    c_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
+    f_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
+    c_llm = groq.LLM(model="llama-3.3-70b-versatile", temperature=0.3)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
-        llm=[c_llm, p_llm],
+        llm=[f_llm, p_llm],
         max_retry_per_llm=1,
     )
 
@@ -122,6 +125,7 @@ async def entrypoint(ctx: agents.JobContext):
     trace_provider, langfuse = setup_langfuse(
         metadata={
             "langfuse.session.id": session_id,
+            "langfuse.user.name": user_name,
         }
     )
 
@@ -136,8 +140,21 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     async def flush_trace():
+        session_end_time = time.time()
+        total_duration = session_end_time - session_start_time
+        total_cost = (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
         for usage in session.usage.model_usage:
-            print(f"\n{usage.provider}/{usage.model}: {usage}\n")
+            cost = calculate_cost(usage)
+            total_cost += cost
+            print(f"\n{usage.provider}/{usage.model}: {usage} (${cost:.4f})")
+        print(f"\nTotal session cost: ${total_cost:.3f}")
+        langfuse.create_score(
+            name="total_session_cost",
+            value=total_cost,
+            session_id=session_id,
+            comment="Total cost including base infrastructure and model usage",
+            data_type="NUMERIC"
+        )
         trace_provider.force_flush()
 
     ctx.add_shutdown_callback(flush_trace)

@@ -5,9 +5,17 @@ from langfuse import Langfuse
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.util.types import AttributeValue
 from livekit.agents.telemetry import set_tracer_provider, tracer as lk_tracer
-from livekit.agents.metrics import TTSMetrics, STTMetrics
+from livekit.agents.metrics import ModelUsage, TTSMetrics
 from livekit.agents.voice.events import MetricsCollectedEvent
-from requests import session
+
+# Define pricing models (not provided by LiveKit)
+PRICING = {
+    "Elevenlabs": {"eleven_flash_v2_5": {"character": 0.00011}}, 
+    "Cartesia": {"sonic-3": {"character": 0.00005}},                  
+    "Deepgram": {"nova-3": {"second": 0.0058}},                 
+    "api.cerebras.ai": {"zai-glm-4.7": {"input": 0.00000225, "output": 0.000000275}, "gpt-oss-120b": {"input": 0.000000175, "output": 0.000000350}},
+    "Groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
+}
 
 
 def setup_langfuse(
@@ -53,20 +61,34 @@ def collect_custom_metrics(ev: MetricsCollectedEvent) -> None:
                     span.set_attribute("gen_ai.request.model", metrics.metadata.model_name)
                 if metrics.metadata.model_provider:
                     span.set_attribute("gen_ai.provider.name", metrics.metadata.model_provider)
-            span.set_attribute("langfuse.observation.type", "speech_synthesis")
+            span.set_attribute("langfuse.observation.type", "generation")
+            span.set_attribute("gen_ai.response.ttft", metrics.ttfb)
+            span.set_attribute("gen_ai.response.duration", metrics.duration)
             span.set_attribute(
                 "langfuse.observation.usage_details",
                 json.dumps(
                     {
-                        "type": metrics.type,
-                        "label": metrics.label,
                         "timestamp": metrics.timestamp,
                         "characters_count": metrics.characters_count,
                         "audio_duration": metrics.audio_duration,
-                        "ttft": metrics.ttfb,
                         "duration": metrics.duration,
                         "cancelled": metrics.cancelled,
                     }
                 ),
             )
             span.end(end_time=end_time_ns)
+
+def calculate_cost(usage: ModelUsage) -> float:
+    pricing = PRICING.get(usage.provider, {}).get(usage.model, {})
+    cost = 0.0
+    
+    if usage.type == "llm_usage":
+        cost += (usage.input_tokens - usage.input_cached_tokens) * pricing.get("input", 0)
+        cost += usage.input_cached_tokens * pricing.get("input_cached", 0)
+        cost += usage.output_tokens * pricing.get("output", 0)
+    elif usage.type == "tts_usage":
+        cost += usage.characters_count * pricing.get("character", 0)
+    elif usage.type == "stt_usage":
+        cost += usage.audio_duration * pricing.get("second", 0)
+    
+    return cost
