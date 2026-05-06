@@ -82,7 +82,11 @@ The data flow can be summarized in the following steps:
 4. **Text-to-Speech (TTS)**:
    - Generated text is converted into audio output and sent back to the student.
 5. **Frontend Integration**:
-   - Commands like page scrolling or topic updates are sent via the `publish_data()` method, ensuring smooth interaction. The topic update command follows this format: `{"action": "set_topic", "topic": "<topic_slug>", "number_of_sections": <n>}`.
+   - Commands like page scrolling, topic updates, section changes, checkpoint display, and UI markers are sent via the `publish_data()` method with the topic `"ui-control"`, ensuring smooth interaction. Each command follows a consistent JSON format with an `"action"` field for frontend routing. For example:
+     - Topic update: `{"action": "set_topic", "topic": "<topic_slug>", "number_of_sections": <n>}`.
+     - Add visual markers: `{"action": "add_markers", "markers": {"m_5_123": {"type": "highlight", "page": 5, "span_id": 123, "delay": 500}}}`.
+   
+   See [Explanation Plan Execution](./explanation-plan-execution.md#frontend-integration) for the full payload format reference.
 
 ## Entry Point Initialization
 

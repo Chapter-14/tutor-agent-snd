@@ -39,17 +39,17 @@ async def entrypoint(ctx: agents.JobContext):
     # Auto-connect to room ``
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
 
-    # participant = await ctx.wait_for_participant()
-    # course_id  = participant.attributes.get("course_id", "phys_1040")
-    # chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    # language   = participant.attributes.get("language", "Arabic")
-    # user_name  = participant.attributes.get("user_name", "undefined")
+    participant = await ctx.wait_for_participant()
+    course_id  = participant.attributes.get("course_id", "phys_1040")
+    chapter_id = participant.attributes.get("chapter_id", "ch_1")
+    language   = participant.attributes.get("language", "Arabic")
+    user_name  = participant.attributes.get("user_name", "undefined")
 
     # Console mode or no metadata — use defaults
-    user_name = "Student"
-    course_id = "phys_1040"
-    chapter_id = "ch_1"
-    language = "English"
+    # user_name = "Student"
+    # course_id = "phys_1040"
+    # chapter_id = "ch_1"
+    # language = "English"
 
     dynamic_prompt = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
@@ -126,7 +126,8 @@ async def entrypoint(ctx: agents.JobContext):
         metadata={
             "langfuse.session.id": session_id,
             "langfuse.user.name": user_name,
-        }
+        }, 
+        environment="development"
     )
 
     system_prompt_obj = langfuse.get_prompt("snd-agent-system-prompt", label="latest")
@@ -142,7 +143,7 @@ async def entrypoint(ctx: agents.JobContext):
     async def flush_trace():
         session_end_time = time.time()
         total_duration = session_end_time - session_start_time
-        total_cost = (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
+        total_cost = 0 # (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
         for usage in session.usage.model_usage:
             cost = calculate_cost(usage)
             total_cost += cost
@@ -173,6 +174,7 @@ async def entrypoint(ctx: agents.JobContext):
             chapter_id=chapter_id,
             dynamic_prompt=dynamic_prompt,
             system_prompt=system_prompt_obj.prompt,
+            participant=participant.identity,
         ),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(

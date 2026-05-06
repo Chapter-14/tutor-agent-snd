@@ -12,7 +12,7 @@ from livekit.agents.voice.events import MetricsCollectedEvent
 PRICING = {
     "Elevenlabs": {"eleven_flash_v2_5": {"character": 0.00011}}, 
     "Cartesia": {"sonic-3": {"character": 0.00005}},                  
-    "Deepgram": {"nova-3": {"second": 0.0058}},                 
+    "Deepgram": {"nova-3": {"second": 0.0000966667}},                 
     "api.cerebras.ai": {"zai-glm-4.7": {"input": 0.00000225, "output": 0.000000275}, "gpt-oss-120b": {"input": 0.000000175, "output": 0.000000350}},
     "Groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
 }
@@ -24,10 +24,12 @@ def setup_langfuse(
     host: str | None = None,
     public_key: str | None = None,
     secret_key: str | None = None,
+    environment: str | None = None,
 ) -> tuple[TracerProvider, Langfuse]:
     public_key = public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
     secret_key = secret_key or os.getenv("LANGFUSE_SECRET_KEY")
     host = host or os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL")
+    environment = environment or os.getenv("LANGFUSE_TRACING_ENVIRONMENT")
 
     if not public_key or not secret_key or not host:
         raise ValueError(
@@ -43,6 +45,7 @@ def setup_langfuse(
         base_url=host,
         tracer_provider=trace_provider,
         should_export_span=lambda span: True,
+        environment=environment
     )
 
     return trace_provider, langfuse

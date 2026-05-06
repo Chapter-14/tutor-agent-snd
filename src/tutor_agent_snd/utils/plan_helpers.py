@@ -3,6 +3,8 @@ from tutor_agent_snd.domain_types import (
     ExplanationPlan,
     Section,
     SectionAction,
+    UIMarker,
+    UpdateUIMarkers
 )
 
 
@@ -14,6 +16,21 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
             action = SectionAction(
                 type=section_data["action"]["type"],
                 page=section_data["action"].get("page"),
+            )
+
+        markers = None
+        if section_data.get("markers"):
+            markers = UpdateUIMarkers(
+                add=[
+                    UIMarker(
+                        id=m["id"],
+                        type=m["type"],
+                        page=m["page"],
+                        span_id=m["span_id"],
+                        delay=m["delay"],  # NEW
+                    ) for m in section_data["markers"].get("add", [])
+                ],
+                remove=section_data["markers"].get("remove", [])
             )
 
         checkpoint = None
@@ -32,6 +49,7 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
             sequence=section_data["sequence"],
             requires_completion_of=section_data.get("requires_completion_of"),
             action=action,
+            markers=markers,
             agent_guidance=section_data["agent_guidance"],
             visual_description=section_data["visual_description"],
             explanation_strategy=section_data["explanation_strategy"],

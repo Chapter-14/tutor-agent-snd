@@ -4,7 +4,7 @@ from livekit import agents
 from livekit.agents import Agent
 from livekit.agents.llm import function_tool
 
-from tutor_agent_snd.domain_types import ExplanationPlan, Section
+from tutor_agent_snd.domain_types import ExplanationPlan, Section, UIMarker
 from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
 from tutor_agent_snd.utils.plan_helpers import format_section_prompt, parse_plan
 
@@ -21,11 +21,13 @@ class Assistant(Agent):
         chapter_id: str,
         dynamic_prompt: str,
         system_prompt: str,
+        participant: str,
     ):
         self.job_ctx = job_ctx
         self.course_id = course_id
         self.chapter_id = chapter_id
         self.current_plan: ExplanationPlan | None = None
+        self.participant = participant
 
         super().__init__(
             instructions=f"{system_prompt}\n{dynamic_prompt}",
@@ -55,6 +57,7 @@ class Assistant(Agent):
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
+        
 
     async def _send_current_section(self, section: str) -> None:
         payload = json.dumps(
@@ -76,6 +79,32 @@ class Assistant(Agent):
 
     async def _send_section_done(self, section: str) -> None:
         payload = json.dumps({"action": "section_done", "section": section})
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )
+
+    async def _add_markers(self, markers: list[UIMarker]) -> None:
+        section_markers = {}
+        for marker in markers:
+            section_markers[marker.id] = {
+                "type": marker.type,    
+                "page": marker.page,
+                "span_id": marker.span_id,
+                "delay": marker.delay,  
+            }
+        payload = payload = json.dumps({
+            "action": "add_markers", 
+            "add": section_markers
+        })
+        await self.job_ctx.room.local_participant.publish_data(
+            payload, reliable=True, topic="ui-control"
+        )
+
+    async def _remove_markers(self, markers: list[str]) -> None:
+        payload = json.dumps({
+            "action": "remove_markers", 
+            "remove": markers
+        })
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
@@ -140,6 +169,8 @@ class Assistant(Agent):
         section.started = True
         self.current_plan.current_section_index = section.sequence - 1
         await self._send_current_section(section.title)
+        await self._remove_markers(section.markers.remove if section.markers else [])
+        await self._add_markers(section.markers.add if section.markers else [])
         if self.current_plan.current_section.checkpoint:
             await self._send_section_checkpoint(self.current_plan.current_section.checkpoint.question)
 
