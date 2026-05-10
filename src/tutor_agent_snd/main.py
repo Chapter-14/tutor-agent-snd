@@ -7,13 +7,11 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 import logging
-import random
 from livekit import agents
 from livekit.plugins import (
     openai,
     groq,
     silero,
-    groq,
     cerebras,
     elevenlabs,
     cartesia,

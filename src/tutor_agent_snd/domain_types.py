@@ -6,6 +6,7 @@ types in their own modules.
 
 from dataclasses import dataclass
 
+
 @dataclass
 class UIMarker:
     id: str  # Unique identifier with scheme m_{page}_{span_id}
@@ -13,11 +14,13 @@ class UIMarker:
     page: int
     span_id: int
     delay: int  # milliseconds delay before showing marker
-    
+
+
 @dataclass
 class UpdateUIMarkers:
     add: list[UIMarker]
     remove: list[str]  # List of marker IDs to remove
+
 
 @dataclass
 class Checkpoint:
@@ -59,7 +62,7 @@ class ExplanationPlan:
     goal: str
     total_sections: int
     sections: list[Section]
-    current_section_index: int = 0
+    current_section_index: int = -1
 
     @property
     def current_section(self) -> Section | None:
@@ -70,4 +73,3 @@ class ExplanationPlan:
     @property
     def is_complete(self) -> bool:
         return all(s.completed for s in self.sections)
-

@@ -92,7 +92,7 @@ class Assistant(Agent):
                 "span_id": marker.span_id,
                 "delay": marker.delay,  
             }
-        payload = payload = json.dumps({
+        payload = json.dumps({
             "action": "add_markers", 
             "add": section_markers
         })
