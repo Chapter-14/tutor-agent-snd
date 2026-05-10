@@ -1,3 +1,4 @@
+import asyncio
 import os
 import random
 import time
@@ -23,13 +24,18 @@ from livekit.agents.voice.events import MetricsCollectedEvent
 from livekit.agents.telemetry import set_tracer_provider
 
 
-from tutor_agent_snd.utils.agent_observation import setup_langfuse, collect_custom_metrics, calculate_cost
+from tutor_agent_snd.utils.agent_observation import (
+    setup_langfuse,
+    collect_custom_metrics,
+    calculate_cost,
+)
 from tutor_agent_snd.agents.tutor_agent import Assistant
 from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
 logger = logging.getLogger(__name__)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+MAX_SESSION_DURATION = int(os.getenv("MAX_SESSION_DURATION", "1800"))
 
 
 def should_record(rate: float = 0.3) -> bool:
@@ -38,7 +44,32 @@ def should_record(rate: float = 0.3) -> bool:
         return random.random() < rate
     return False
 
+
 ## Entrypoint for the agent
+
+
+async def _session_watchdog(
+    session: AgentSession,
+    ctx: agents.JobContext,
+    max_seconds: int,
+    session_start_time: float,
+) -> None:
+    await asyncio.sleep(max_seconds)
+    elapsed = time.time() - session_start_time
+    
+    # Send UI message to frontend
+    await ctx.room.local_participant.publish_data(
+        json.dumps({"action": "session_ending", "message": "Session ending due to time limit."}),
+        reliable=True,
+        topic="ui-control"
+    )
+    
+    logger.warning(
+        "Session duration limit reached (%ds elapsed, limit=%ds). Shutting down.",
+        int(elapsed),
+        max_seconds,
+    )
+    session.shutdown(drain=True)
 
 
 async def entrypoint(ctx: agents.JobContext):
@@ -54,10 +85,10 @@ async def entrypoint(ctx: agents.JobContext):
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
 
     participant = await ctx.wait_for_participant()
-    course_id  = participant.attributes.get("course_id", "phys_1040")
+    course_id = participant.attributes.get("course_id", "phys_1040")
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
-    language   = participant.attributes.get("language", "Arabic")
-    user_name  = participant.attributes.get("user_name", "undefined")
+    language = participant.attributes.get("language", "Arabic")
+    user_name = participant.attributes.get("user_name", "undefined")
 
     # Console mode or no metadata — use defaults
     # user_name = "Student"
@@ -131,17 +162,18 @@ async def entrypoint(ctx: agents.JobContext):
 
     tts_with_fallback.on("tts_availability_changed", on_tts_availability_changed)
 
-
     # Langfuse and Custom Metrics Collection
     entropy = random.randint(10000, 99999)
-    session_id = f"{ctx.room.name}_{entropy}"  if ENVIRONMENT != "production" else ctx.room.name # remove in production. and use ctx.room.name .
+    session_id = (
+        f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else ctx.room.name
+    )  # remove in production. and use ctx.room.name .
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
             "langfuse.session.id": session_id,
             "langfuse.user.name": user_name,
-        }, 
-        environment=ENVIRONMENT
+        },
+        environment=ENVIRONMENT,
     )
 
     prompt_label = "latest" if ENVIRONMENT != "production" else "production"
@@ -159,7 +191,7 @@ async def entrypoint(ctx: agents.JobContext):
     async def flush_trace():
         session_end_time = time.time()
         total_duration = session_end_time - session_start_time
-        total_cost = 0 # (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
+        total_cost = 0  # (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
         for usage in session.usage.model_usage:
             cost = calculate_cost(usage)
             total_cost += cost
@@ -170,13 +202,13 @@ async def entrypoint(ctx: agents.JobContext):
             value=total_cost,
             session_id=session_id,
             comment="Total cost including base infrastructure and model usage",
-            data_type="NUMERIC"
+            data_type="NUMERIC",
         )
         trace_provider.force_flush()
 
     ctx.add_shutdown_callback(flush_trace)
 
-    # Custom Metrics Collection    
+    # Custom Metrics Collection
     @session.on("metrics_collected")
     def on_metrics_collected(ev: MetricsCollectedEvent) -> None:
         collect_custom_metrics(ev)
@@ -200,6 +232,9 @@ async def entrypoint(ctx: agents.JobContext):
         ),
         record=record_this_session,
     )
+
+    if MAX_SESSION_DURATION > 0:
+        asyncio.create_task(_session_watchdog(session, ctx, MAX_SESSION_DURATION, session_start_time))
 
 
 def main() -> None:
