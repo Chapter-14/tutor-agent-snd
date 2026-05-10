@@ -1,3 +1,4 @@
+import os
 import random
 import time
 
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv(".env")
 
 import logging
+import random
 from livekit import agents
 from livekit.plugins import (
     openai,
@@ -29,12 +31,26 @@ from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
 logger = logging.getLogger(__name__)
 
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+
+def should_record(rate: float = 0.3) -> bool:
+    """Returns True based on the provided probability rate."""
+    if ENVIRONMENT == "production":
+        return random.random() < rate
+    return False
+
 ## Entrypoint for the agent
 
 
 async def entrypoint(ctx: agents.JobContext):
     """Entry point for the agent."""
+
+    # Record the session start time for cost calculation
     session_start_time = time.time()
+
+    # Determine recording status at the start of the job
+    record_this_session = should_record(0.3)
 
     # Auto-connect to room ``
     await ctx.connect(auto_subscribe=agents.AutoSubscribe.AUDIO_ONLY)
@@ -86,7 +102,7 @@ async def entrypoint(ctx: agents.JobContext):
     c_llm = groq.LLM(model="llama-3.3-70b-versatile", temperature=0.3)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
-        llm=[f_llm, p_llm],
+        llm=[p_llm, f_llm],
         max_retry_per_llm=1,
     )
 
@@ -120,17 +136,19 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Langfuse and Custom Metrics Collection
     entropy = random.randint(10000, 99999)
-    session_id = f"{ctx.room.name}_{entropy}"  # remove in production. and use ctx.room.name .
+    session_id = f"{ctx.room.name}_{entropy}"  if ENVIRONMENT != "production" else ctx.room.name # remove in production. and use ctx.room.name .
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
             "langfuse.session.id": session_id,
             "langfuse.user.name": user_name,
         }, 
-        environment="development"
+        environment=ENVIRONMENT
     )
 
-    system_prompt_obj = langfuse.get_prompt("snd-agent-system-prompt", label="latest")
+    prompt_label = "latest" if ENVIRONMENT != "production" else "production"
+
+    system_prompt_obj = langfuse.get_prompt("snd-agent-system-prompt", label=prompt_label)
 
     set_tracer_provider(
         trace_provider,
@@ -182,6 +200,7 @@ async def entrypoint(ctx: agents.JobContext):
             ),
             text_output=False,
         ),
+        record=record_this_session,
     )
 
 
