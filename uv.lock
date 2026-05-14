@@ -778,7 +778,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1761,6 +1761,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b2/d2/2555230147e58ec5fe7a28d959c54f3d4e05fa9ebbef6eb0ebdd6ba9799f/livekit_plugins_groq-1.5.6.tar.gz", hash = "sha256:454886c6b6fb5cc6194d2f2630f2b4fb7e872b41e0741f1c0d0dea73299260d2", size = 6138, upload-time = "2026-04-22T20:22:22.141Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/06/60/4072e32a95c3c526e601d606f2e5db9358969ac3924adda09f89e1a57146/livekit_plugins_groq-1.5.6-py3-none-any.whl", hash = "sha256:a2c2887efdda0663ceb8f35f645ff2234813e92f3fde7d14aa402588dd2732ee", size = 7327, upload-time = "2026-04-22T20:22:20.836Z" },
+]
+
+[[package]]
+name = "livekit-plugins-munsit"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "livekit-agents", extra = ["codecs"] },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/46/10f6c15757b0f4437271aa085355191c89c4a3c8c602d8bc556d7f352a95/livekit_plugins_munsit-0.3.0.tar.gz", hash = "sha256:c1dda899600c36cc5cd2f3b68cb778fc23a42756636b694d50aa0369ea070e7a", size = 19091, upload-time = "2026-05-07T12:02:06.74Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/f7/7558d0553df9e9f60941c2828574836de7021b35db9169fbff3c80286221/livekit_plugins_munsit-0.3.0-py3-none-any.whl", hash = "sha256:b24ec55b805eb161becf24287b5701920ca52e6e26032354fb4350a9fcdfc62a", size = 20395, upload-time = "2026-05-07T12:02:05.421Z" },
 ]
 
 [[package]]
@@ -3885,6 +3900,7 @@ dependencies = [
     { name = "livekit-plugins-deepgram" },
     { name = "livekit-plugins-elevenlabs" },
     { name = "livekit-plugins-faseeh" },
+    { name = "livekit-plugins-munsit" },
     { name = "livekit-plugins-noise-cancellation" },
     { name = "livekit-plugins-openai" },
     { name = "livekit-plugins-silero" },
@@ -3961,6 +3977,7 @@ requires-dist = [
     { name = "livekit-plugins-google", marker = "extra == 'llm'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-groq", marker = "extra == 'all'", specifier = ">=1.0.0" },
     { name = "livekit-plugins-groq", marker = "extra == 'llm'", specifier = ">=1.0.0" },
+    { name = "livekit-plugins-munsit", specifier = ">=0.3.0" },
     { name = "livekit-plugins-noise-cancellation", specifier = "~=0.2" },
     { name = "livekit-plugins-openai", specifier = ">=1.0.0" },
     { name = "livekit-plugins-silero", specifier = ">=1.0.0" },

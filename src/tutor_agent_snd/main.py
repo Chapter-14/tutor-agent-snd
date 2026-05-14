@@ -10,8 +10,6 @@ load_dotenv(".env")
 import logging
 from livekit import agents
 from livekit.plugins import (
-    openai,
-    groq,
     silero,
     cerebras,
     elevenlabs,
@@ -19,7 +17,7 @@ from livekit.plugins import (
     noise_cancellation,
     deepgram,
 )
-from livekit.agents import AgentSession, room_io, TurnHandlingOptions
+from livekit.agents import AgentSession, room_io, TurnHandlingOptions, ChatMessage
 from livekit.agents.voice.events import MetricsCollectedEvent
 from livekit.agents.telemetry import set_tracer_provider
 
@@ -104,6 +102,15 @@ async def entrypoint(ctx: agents.JobContext):
         "Arabic": "ar",
     }
 
+    # LLM setup with fallback mechanism
+    p_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
+    f_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
+
+    llm_with_fallback = agents.llm.FallbackAdapter(
+        llm=[p_llm, f_llm] if ENVIRONMENT == "production" else [f_llm, p_llm],  # order matters: first is primary
+        max_retry_per_llm=1,
+    )
+
     # TTS setup with fallback mechanism
     p_tts = elevenlabs.TTS(
         voice_id="pCKbQ4EPGE06zpEPGNvS",  # Abdullah - Arabic voice (updated)
@@ -113,45 +120,36 @@ async def entrypoint(ctx: agents.JobContext):
 
     f_tts = cartesia.TTS(
         model="sonic-3",
-        # voice="3e39e9a5-585c-4f5f-bac6-5e4905c51095", # ِArabic voice
-        voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e",  # ُِEnglish voice
+        voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e",  # English voice
         language=ln_code.get(language, "en"),
     )
 
-    # c_tts = openai.TTS(model="tts-1")
 
     tts_with_fallback = agents.tts.FallbackAdapter(
-        tts=[f_tts, p_tts],  # order matters: first is primary
+        tts=[p_tts, f_tts] if ENVIRONMENT == "production" else [f_tts, p_tts],  # order matters: first is primary
         max_retry_per_tts=1,  # tune retries before switching
-    )
-
-    # LLM setup with fallback mechanism
-    p_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
-    f_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
-    c_llm = groq.LLM(model="llama-3.3-70b-versatile", temperature=0.3)
-
-    llm_with_fallback = agents.llm.FallbackAdapter(
-        llm=[p_llm, f_llm],
-        max_retry_per_llm=1,
     )
 
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
         stt=deepgram.STT(model="nova-3", language=ln_code.get(language, "en")),
-        llm=llm_with_fallback,
+        llm=llm_with_fallback, # openai.LLM(model="gpt-5-mini", temperature=0.3),
         tts=tts_with_fallback,
-        vad=silero.VAD.load(),
+        vad=silero.VAD.load(activation_threshold=0.6, min_speech_duration=0.3),
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={
-                "mode": "fixed",
-                "min_delay": 0.5,
-                "max_delay": 3.0,
+                "mode": "dynamic",
+                "min_delay": 0.4,
+                "max_delay": 2.5,
             },
             interruption={
                 "mode": "adaptive",
-                "min_duration": 0.5,
+                "min_duration": 0.45,
+                "min_words": 1,
                 "resume_false_interruption": True,
+                "false_interruption_timeout": 1.5,
+                "discard_audio_if_uninterruptible": True,
             },
             preemptive_generation={"enabled": False},
         ),
@@ -166,7 +164,7 @@ async def entrypoint(ctx: agents.JobContext):
     entropy = random.randint(10000, 99999)
     session_id = (
         f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else ctx.room.name
-    )  # remove in production. and use ctx.room.name .
+    )
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
@@ -222,7 +220,6 @@ async def entrypoint(ctx: agents.JobContext):
             chapter_id=chapter_id,
             dynamic_prompt=dynamic_prompt,
             system_prompt=system_prompt_obj.prompt,
-            participant=participant.identity,
         ),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(

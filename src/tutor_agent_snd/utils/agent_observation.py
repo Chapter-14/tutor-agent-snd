@@ -10,11 +10,12 @@ from livekit.agents.voice.events import MetricsCollectedEvent
 
 # Define pricing models (not provided by LiveKit)
 PRICING = {
-    "Elevenlabs": {"eleven_flash_v2_5": {"character": 0.00011}}, 
-    "Cartesia": {"sonic-3": {"character": 0.00005}},                  
-    "Deepgram": {"nova-3": {"second": 0.0000966667}},                 
+    "elevenlabs": {"eleven_flash_v2_5": {"character": 0.00011}}, 
+    "cartesia": {"sonic-3": {"character": 0.00005}},                  
+    "deepgram": {"nova-3": {"second": 0.0000966667}},
+    "munsit": {"munsit-en-ar": {"second": 0.000833333}, "munsit": {"second": 0.000833333}},              
     "api.cerebras.ai": {"zai-glm-4.7": {"input": 0.00000225, "output": 0.000000275}, "gpt-oss-120b": {"input": 0.000000175, "output": 0.000000350}},
-    "Groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
+    "groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
 }
 
 
@@ -82,7 +83,7 @@ def collect_custom_metrics(ev: MetricsCollectedEvent) -> None:
             span.end(end_time=end_time_ns)
 
 def calculate_cost(usage: ModelUsage) -> float:
-    pricing = PRICING.get(usage.provider, {}).get(usage.model, {})
+    pricing = PRICING.get(usage.provider.lower(), {}).get(usage.model.lower(), {})
     cost = 0.0
     
     if usage.type == "llm_usage":

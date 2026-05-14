@@ -5,8 +5,10 @@
     "deepgram",
     "dotenv",
     "elevenlabs",
+    "faseeh",
     "groq",
     "livekit",
+    "munsit",
     "sanad",
     "silero"
   ]
