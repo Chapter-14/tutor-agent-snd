@@ -2,7 +2,7 @@ import json
 
 from livekit import agents
 from livekit.agents import Agent
-from livekit.agents.llm import ChatContext, ChatMessage, function_tool
+from livekit.agents.llm import function_tool
 
 from tutor_agent_snd.domain_types import ExplanationPlan, Section, UIMarker
 from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
@@ -37,39 +37,6 @@ class Assistant(Agent):
         await self.session.generate_reply(
             instructions="""Great the user by their name. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question."""
         )
-
-    # async def on_user_turn_completed(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
-    #     section = self.current_plan.current_section if self.current_plan else None
-    #     if not (
-    #         section and section.checkpoint and not section.checkpoint.completed and section.started
-    #     ):
-    #         return
-
-    #     self.checkpoint_answers_counter += 1
-
-    #     if self.checkpoint_answers_counter >= 2:
-    #         section.checkpoint.completed = True
-    #         section.completed = True
-    #         await self._send_section_done(section.title)
-
-    #         if section.sequence < len(self.current_plan.sections):
-    #             next_section = self.current_plan.sections[section.sequence]
-    #             turn_ctx.add_message(
-    #                 role="system",
-    #                 content=(
-    #                     f"[ADVANCE] The student reached the maximum attempts for this checkpoint. "
-    #                     f"Briefly explain the correct answer, then move to the next section: {next_section.id}."
-    #                 ),
-    #             )
-    #         else:
-    #             turn_ctx.add_message(
-    #                 role="system",
-    #                 content=(
-    #                     "[ADVANCE] Maximum attempts reached. Explain the correct answer and wrap up."
-    #                 ),
-    #             )
-    #     else:
-    #         return
 
     # Frontend communication helpers
 
@@ -152,10 +119,6 @@ class Assistant(Agent):
     )
     async def get_explanation_plan(self, topic: str) -> str:
         """Fetches and loads the structured explanation plan for a topic."""
-
-        # await self.session.generate_reply(
-        #     instructions="Give a very brief overview of the chapter, DO NOT mention anything about the plan or the tool call."
-        # )
 
         plan_json = await fetch_md_from_bunny(
             f"courses/{self.course_id}/{self.chapter_id}/{topic}.json"
