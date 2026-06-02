@@ -13,7 +13,6 @@ Source of truth: `src/tutor_agent_snd/agents/tutor_agent.py`
 class ExplanationPlan:
     topic: str
     title: str
-    goal: str
     total_sections: int
     sections: list[Section]
     current_section_index: int = 0
@@ -23,7 +22,6 @@ class ExplanationPlan:
 
 - `topic` (str): The subject of the explanation plan.
 - `title` (str): Human-readable title of the loaded plan.
-- `goal` (str): High-level learning objective for the topic.
 - `total_sections` (int): Declared number of sections in the plan.
 - `sections` (list[Section]): The list of sections included in the plan.
 - `current_section_index` (int): Zero-based pointer to the active section.
@@ -48,8 +46,8 @@ class Section:
     markers: UpdateUIMarkers | None
     agent_guidance: str
     visual_description: str
-    explanation_strategy: list[str]
-    checkpoint: Checkpoint | None
+    strategy: list[str]
+    question: Question | None
     completed: bool = False
     started: bool = False
 ```
@@ -64,35 +62,35 @@ class Section:
 - `markers` (UpdateUIMarkers | None): Optional marker transition. When present, its `remove` list is processed before its `add` list when the section starts. When `None`, no marker changes occur for this section.
 - `agent_guidance` (str): Tone and delivery guidance for the assistant.
 - `visual_description` (str): Description of what the learner should be seeing.
-- `explanation_strategy` (list[str]): Ordered talking points for the section.
-- `checkpoint` (Checkpoint | None): Optional checkpoint to validate understanding.
+- `strategy` (list[str]): Ordered talking points for the section.
+- `question` (Question | None): Optional question to validate understanding.
 - `completed` (bool): Marks whether the section is completed.
 - `started` (bool): Marks whether section execution has started.
 
-## Checkpoint
+## Question
 
 ### Definition
 
 ```python
 @dataclass
-class Checkpoint:
+class Question:
     id: str
-    mandatory: bool
+    type: str
     question: str
-    success_criteria: str
-    on_confusion: str
+    expected_answer: str
+    reexplain_guide: str
     completed: bool = False
     student_responded: bool = False
 ```
 
 ### Field Descriptions
 
-- `id` (str): Unique identifier for the checkpoint.
-- `mandatory` (bool): Indicates whether this checkpoint must be satisfied.
-- `question` (str): The checkpoint question text.
-- `success_criteria` (str): What counts as an acceptable student response.
-- `on_confusion` (str): Recovery guidance for re-explaining the concept.
-- `completed` (bool): Marks whether the checkpoint was passed.
+- `id` (str): Unique identifier for the question.
+- `type` (str): Question type — `"check_understanding"` for comprehension checks or `"topic_checkpoint"` for topic-level assessments.
+- `question` (str): The question text.
+- `expected_answer` (str): What counts as an acceptable student response.
+- `reexplain_guide` (str): Recovery guidance for re-explaining the concept.
+- `completed` (bool): Marks whether the question was passed.
 - `student_responded` (bool): Marks whether a learner response has been captured.
 
 ## SectionAction
@@ -179,12 +177,12 @@ The remove step always executes before the add step so that a marker can be remo
 ### Section Progression
 
 - `current_section_index` tracks active section navigation.
-- Each section is marked `started` when execution begins and `completed` after checkpoint success.
+- Each section is marked `started` when execution begins and `completed` after question success.
 
-### Checkpoint Flow
+### Question Flow
 
-- The active checkpoint is attached to `current_plan.current_section.checkpoint`.
-- `student_responded` and `completed` jointly track checkpoint status.
+- The active question is attached to `current_plan.current_section.question`.
+- `student_responded` and `completed` jointly track question status.
 
 ### Marker Lifecycle
 

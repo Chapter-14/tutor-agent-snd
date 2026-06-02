@@ -23,12 +23,12 @@ class UpdateUIMarkers:
 
 
 @dataclass
-class Checkpoint:
+class Question:
     id: str
-    mandatory: bool
+    type: str
     question: str
-    success_criteria: str
-    on_confusion: str
+    expected_answer: str
+    reexplain_guide: str
     completed: bool = False
     student_responded: bool = False
 
@@ -49,8 +49,8 @@ class Section:
     markers: UpdateUIMarkers | None
     agent_guidance: str
     visual_description: str
-    explanation_strategy: list[str]
-    checkpoint: Checkpoint | None
+    strategy: list[str]
+    question: Question | None
     completed: bool = False
     started: bool = False
 
@@ -59,7 +59,6 @@ class Section:
 class ExplanationPlan:
     topic: str
     title: str
-    goal: str
     total_sections: int
     sections: list[Section]
     current_section_index: int = -1

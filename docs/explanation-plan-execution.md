@@ -15,7 +15,7 @@ graph TD
     C2 --> D[Explain Strategy Points + Ask Checkpoint]
     D -->|Student Responds| E[checkpoint_passed(student_understood)]
     E -->|Evaluate Understanding| F{Understood?}
-    F -->|Yes| G[Mark Checkpoint Complete]
+    F -->|Yes| G[Mark Question Complete]
     F -->|No| H[Return HINT + Re-explain]
     G -->|More Sections| C
     G -->|Last Section| I[Topic Complete]
@@ -40,7 +40,7 @@ graph TD
   1. Sends a `set_section` UI control command.
   2. Sends a `remove_markers` UI control command if the section defines markers with a `remove` list.
   3. Sends an `add_markers` UI control command if the section defines markers with an `add` list.
-  4. Sends a `set_checkpoint` UI control command if the section has a checkpoint.
+  4. Sends a `set_checkpoint` UI control command if the section has a question.
   5. Sends a `scroll` UI control command if the section action type is `"scroll"`.
 - **Return Value**: `[SUCCESS]`/`[ERROR]` formatted string including section prompt content.
 
@@ -75,8 +75,8 @@ graph TD
    - Markers are not automatically cleared when a section completes. They persist until explicitly removed by a subsequent section's `remove` list or by a frontend navigation event.
 
 4. **Checkpoint Handling**
-   - `student_responded` is set when the learner answers.
-   - If understood, checkpoint is marked complete and section completion event is published.
+- `student_responded` is set when the learner answers.
+- If understood, question is marked complete and section completion event is published.
    - If not understood, a `[HINT]` response is returned for guided retry.
 
 5. **Completion**
@@ -93,7 +93,7 @@ graph TD
 
 ### Checkpoint Enforcement
 
-- A new section cannot be started while the current started section has an incomplete checkpoint.
+- A new section cannot be started while the current started section has an incomplete question.
 - Errors:
   - **Skips Section**: Notify and revert.
 
@@ -105,8 +105,8 @@ graph TD
 
 ## Guardrails
 
-- **No Skipping**: Prevent skipping sections or checkpoints.
-- **Default Hints**: Ensure hints are provided for all misunderstood checkpoints.
+- **No Skipping**: Prevent skipping sections or questions.
+- **Default Hints**: Ensure hints are provided for all misunderstood questions.
 
 ## Frontend Integration
 
@@ -128,7 +128,7 @@ All UI commands are sent via LiveKit's `publish_data()` method with the topic `"
 | `scroll` | Navigate to a specific page | Section has `action.type = "scroll"` |
 | `set_topic` | Notify frontend of active topic | `get_explanation_plan` called |
 | `set_section` | Notify frontend of active section | `start_section` called |
-| `set_checkpoint` | Display checkpoint question | Section has a checkpoint |
+| `set_checkpoint` | Display section question | Section has a question |
 | `section_done` | Mark section as completed | `checkpoint_passed` with success |
 | `add_markers` | Render visual markers on the page | Section defines `markers.add` |
 | `remove_markers` | Remove visual markers from the page | Section defines `markers.remove` |

@@ -55,14 +55,14 @@ async def _session_watchdog(
 ) -> None:
     await asyncio.sleep(max_seconds)
     elapsed = time.time() - session_start_time
-    
+
     # Send UI message to frontend
     await ctx.room.local_participant.publish_data(
         json.dumps({"action": "session_ending", "message": "Session ending due to time limit."}),
         reliable=True,
-        topic="ui-control"
+        topic="ui-control",
     )
-    
+
     logger.warning(
         "Session duration limit reached (%ds elapsed, limit=%ds). Shutting down.",
         int(elapsed),
@@ -89,12 +89,6 @@ async def entrypoint(ctx: agents.JobContext):
     language = participant.attributes.get("language", "Arabic")
     user_name = participant.attributes.get("user_name", "undefined")
 
-    # Console mode or no metadata — use defaults
-    # user_name = "Student"
-    # course_id = "phys_1040"
-    # chapter_id = "ch_1"
-    # language = "English"
-
     dynamic_prompt = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
     # Language code mapping for TTS
@@ -108,7 +102,9 @@ async def entrypoint(ctx: agents.JobContext):
     f_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
-        llm=[p_llm, f_llm] if ENVIRONMENT == "production" else [f_llm, p_llm],  # order matters: first is primary
+        llm=(
+            [p_llm, f_llm] if ENVIRONMENT == "production" else [f_llm, p_llm]
+        ),  # order matters: first is primary
         max_retry_per_llm=1,
     )
 
@@ -121,16 +117,17 @@ async def entrypoint(ctx: agents.JobContext):
 
     f_tts = openai.TTS(model="tts-1")
 
-
     tts_with_fallback = agents.tts.FallbackAdapter(
-        tts=[p_tts, f_tts] if ENVIRONMENT == "production" else [f_tts, p_tts],  # order matters: first is primary
+        tts=(
+            [p_tts, f_tts] if ENVIRONMENT == "production" else [f_tts, p_tts]
+        ),  # order matters: first is primary
         max_retry_per_tts=1,  # tune retries before switching
     )
 
     # Configure the voice pipeline with the essentials
     session: AgentSession = AgentSession(
         stt=deepgram.STT(model="nova-3", language=ln_code.get(language, "en")),
-        llm=llm_with_fallback, # openai.LLM(model="gpt-5-mini", temperature=0.3),
+        llm=llm_with_fallback,  # openai.LLM(model="gpt-5-mini", temperature=0.3),
         tts=tts_with_fallback,
         vad=silero.VAD.load(activation_threshold=0.6, min_speech_duration=0.3),
         turn_handling=TurnHandlingOptions(
@@ -159,9 +156,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     # Langfuse and Custom Metrics Collection
     entropy = random.randint(10000, 99999)
-    session_id = (
-        f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else ctx.room.name
-    )
+    session_id = f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else ctx.room.name
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
@@ -186,7 +181,9 @@ async def entrypoint(ctx: agents.JobContext):
     async def flush_trace():
         session_end_time = time.time()
         total_duration = session_end_time - session_start_time
-        total_cost = (total_duration / 60) * (0.001 + 0.01 + (0.01 if record_this_session else 0))  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
+        total_cost = (total_duration / 60) * (
+            0.001 + 0.01 + (0.01 if record_this_session else 0)
+        )  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
         for usage in session.usage.model_usage:
             cost = calculate_cost(usage)
             total_cost += cost
@@ -228,7 +225,9 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     if MAX_SESSION_DURATION > 0:
-        asyncio.create_task(_session_watchdog(session, ctx, MAX_SESSION_DURATION, session_start_time))
+        asyncio.create_task(
+            _session_watchdog(session, ctx, MAX_SESSION_DURATION, session_start_time)
+        )
 
 
 def main() -> None:

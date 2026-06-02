@@ -78,7 +78,5 @@ def test_calculate_cost_unknown_model():
 
 
 def test_calculate_cost_zero_tokens():
-    usage = _make_usage(
-        provider="cerebras", model="zai-glm-4.7", input_tokens=0, output_tokens=0
-    )
+    usage = _make_usage(provider="cerebras", model="zai-glm-4.7", input_tokens=0, output_tokens=0)
     assert calculate_cost(usage) == 0.0

@@ -1,20 +1,20 @@
 from tutor_agent_snd.domain_types import (
-    Checkpoint,
     ExplanationPlan,
+    Question,
     Section,
     SectionAction,
     UIMarker,
     UpdateUIMarkers,
 )
 
-REQUIRED_PLAN_KEYS = {"topic", "title", "goal", "total_sections", "sections"}
+REQUIRED_PLAN_KEYS = {"topic", "title", "total_sections", "sections"}
 REQUIRED_SECTION_KEYS = {
     "id",
     "title",
     "sequence",
     "agent_guidance",
     "visual_description",
-    "explanation_strategy",
+    "strategy",
 }
 
 
@@ -53,14 +53,14 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
                     remove=section_data["markers"].get("remove", []),
                 )
 
-            checkpoint = None
-            if section_data.get("checkpoint"):
-                checkpoint = Checkpoint(
-                    id=section_data["checkpoint"]["id"],
-                    mandatory=section_data["checkpoint"]["mandatory"],
-                    question=section_data["checkpoint"]["question"],
-                    success_criteria=section_data["checkpoint"]["success_criteria"],
-                    on_confusion=section_data["checkpoint"]["on_confusion"],
+            question = None
+            if section_data.get("question"):
+                question = Question(
+                    id=section_data["question"]["id"],
+                    type=section_data["question"]["type"],
+                    question=section_data["question"]["question"],
+                    expected_answer=section_data["question"]["expected_answer"],
+                    reexplain_guide=section_data["question"]["reexplain_guide"],
                 )
 
             section = Section(
@@ -72,8 +72,8 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
                 markers=markers,
                 agent_guidance=section_data["agent_guidance"],
                 visual_description=section_data["visual_description"],
-                explanation_strategy=section_data["explanation_strategy"],
-                checkpoint=checkpoint,
+                strategy=section_data["strategy"],
+                question=question,
             )
             sections.append(section)
         except KeyError as e:
@@ -84,7 +84,6 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
     return ExplanationPlan(
         topic=plan_data["topic"],
         title=plan_data["title"],
-        goal=plan_data["goal"],
         total_sections=plan_data["total_sections"],
         sections=sections,
     )
@@ -96,11 +95,11 @@ def format_section_prompt(section: Section) -> str:
     prompt += f"[Tone]: {section.agent_guidance}\n\n"
     prompt += f"[Scene]: {section.visual_description}\n\n"
     prompt += "[Cover]:\n"
-    for i, strategy_point in enumerate(section.explanation_strategy, 1):
+    for i, strategy_point in enumerate(section.strategy, 1):
         prompt += f"{i}. {strategy_point}\n"
 
-    if section.checkpoint:
+    if section.question:
         prompt += "\n"
-        prompt += f"[Ask]: {section.checkpoint.question}\n"
-        prompt += f"[Expected]: {section.checkpoint.success_criteria}\n"
+        prompt += f"[Ask]: {section.question.question}\n"
+        prompt += f"[Expected]: {section.question.expected_answer}\n"
     return prompt

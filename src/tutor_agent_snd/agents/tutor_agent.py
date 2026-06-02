@@ -130,7 +130,7 @@ class Assistant(Agent):
 
         first_section = self.current_plan.sections[0]
 
-        return f"[SUCCESS] Loaded. Goal: {self.current_plan.goal}. Begin with {first_section.id}."
+        return f"[SUCCESS] Loaded. Begin with {first_section.id}."
 
     @function_tool(description="Begin explaining a section. You must complete sections in order.")
     async def start_section(self, section_id: str) -> str:
@@ -152,20 +152,16 @@ class Assistant(Agent):
 
         # Prevent starting new section if previous checkpoint not completed
         current = self.current_plan.current_section
-        if current and current.checkpoint and not current.checkpoint.completed and current.started:
-            return (
-                "[ERROR] Complete the current section's checkpoint before starting a new section."
-            )
+        if current and current.question and not current.question.completed and current.started:
+            return "[ERROR] Complete the current section's question before starting a new section."
 
         section.started = True
         self.current_plan.current_section_index = section.sequence - 1
         await self._send_current_section(section.title)
         await self._remove_markers(section.markers.remove if section.markers else [])
         await self._add_markers(section.markers.add if section.markers else [])
-        if self.current_plan.current_section.checkpoint:
-            await self._send_section_checkpoint(
-                self.current_plan.current_section.checkpoint.question
-            )
+        if self.current_plan.current_section.question:
+            await self._send_section_checkpoint(self.current_plan.current_section.question.question)
 
         if section.action and section.action.type == "scroll" and section.action.page:
             await self._execute_scroll(section.action.page)
@@ -177,10 +173,10 @@ class Assistant(Agent):
         description="Call this EVERY TIME the user gives an answer to your checkpoint question. Evaluates if they understood and give instructions on what to do next."
     )
     async def checkpoint_passed(self, student_understood: bool) -> str:
-        """Evaluate the student's response to the checkpoint question."""
+        """Evaluate the student's response to the question."""
 
         async def finish_section(message: str) -> str:
-            section.checkpoint.completed = True
+            section.question.completed = True
             section.completed = True
             await self._send_section_done(section.title)
 
@@ -196,13 +192,13 @@ class Assistant(Agent):
             return "[ERROR] No plan loaded."
 
         section = self.current_plan.current_section
-        if section is None or section.checkpoint is None:
-            return "[ERROR] No current section with checkpoint."
+        if section is None or section.question is None:
+            return "[ERROR] No current section with question."
 
-        if section.checkpoint.completed:
-            return "[ERROR] Checkpoint already completed."
+        if section.question.completed:
+            return "[ERROR] Question already completed."
 
-        section.checkpoint.student_responded = True
+        section.question.student_responded = True
 
         if student_understood:
             self.checkpoint_answers_counter = 0
@@ -215,4 +211,4 @@ class Assistant(Agent):
                 return await finish_section(
                     "[MAX_RETRIES] Student didn't pass after 2 attempts. Explain the correct answer yourself, then continue with the next section:"
                 )
-            return f"[HINT] Re-explain using: {section.checkpoint.on_confusion}. Then ask again and wait."
+            return f"[HINT] Re-explain using: {section.question.reexplain_guide}. Then ask again and wait."
