@@ -148,7 +148,7 @@ class Assistant(Agent):
         if section.requires_completion_of:
             prereq = self._get_section_by_id(section.requires_completion_of)
             if prereq and not prereq.completed:
-                return f"[ERROR] You must complete {prereq.id} ({prereq.title}) before starting this section."
+                return f"[ERROR] You must complete {prereq.id} ({prereq.title}) before starting this section. Use the start_section tool with the {prereq.id} section ID to start it."
 
         # Prevent starting new section if previous checkpoint not completed
         current = self.current_plan.current_section
