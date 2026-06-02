@@ -185,7 +185,7 @@ async def entrypoint(ctx: agents.JobContext):
     async def flush_trace():
         session_end_time = time.time()
         total_duration = session_end_time - session_start_time
-        total_cost = 0  # (total_duration / 60) * (0.001 + 0.01 + 0.01)  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
+        total_cost = (total_duration / 60) * (0.001 + 0.01 + (0.01 if record_this_session else 0))  # Base cost for the session duration per minute (Last 0.01 is for LK observability features)
         for usage in session.usage.model_usage:
             cost = calculate_cost(usage)
             total_cost += cost
