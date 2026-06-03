@@ -28,6 +28,7 @@ class Question:
     type: str
     question: str
     expected_answer: str
+    choices: list[str]
     reexplain_guide: str
     completed: bool = False
     student_responded: bool = False
@@ -59,6 +60,7 @@ class Section:
 class ExplanationPlan:
     topic: str
     title: str
+    topic_sequence_number: int
     total_sections: int
     sections: list[Section]
     current_section_index: int = -1

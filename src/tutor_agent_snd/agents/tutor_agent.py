@@ -60,20 +60,16 @@ class Assistant(Agent):
             payload, reliable=True, topic="ui-control"
         )
 
-    async def _send_current_section(self, section: str) -> None:
+    async def _send_current_section(self, section: str, question: str, choices: list[str]) -> None:
         payload = json.dumps(
             {
                 "action": "set_section",
                 "section": section,
                 "current_section_index": self.current_plan.current_section_index + 1,
+                "question": question,
+                "choices": choices,
             }
         )
-        await self.job_ctx.room.local_participant.publish_data(
-            payload, reliable=True, topic="ui-control"
-        )
-
-    async def _send_section_checkpoint(self, question: str) -> None:
-        payload = json.dumps({"action": "set_checkpoint", "checkpoint_question": question})
         await self.job_ctx.room.local_participant.publish_data(
             payload, reliable=True, topic="ui-control"
         )
@@ -159,11 +155,9 @@ class Assistant(Agent):
 
         section.started = True
         self.current_plan.current_section_index = section.sequence - 1
-        await self._send_current_section(section.title)
+        await self._send_current_section(section.title, self.current_plan.current_section.question.question or "", self.current_plan.current_section.question.choices or [])
         await self._remove_markers(section.markers.remove if section.markers else [])
         await self._add_markers(section.markers.add if section.markers else [])
-        if self.current_plan.current_section.question and self.current_plan.current_section.question.type == "topic_checkpoint":
-            await self._send_section_checkpoint(self.current_plan.current_section.question.question)
 
         if section.action and section.action.type == "scroll" and section.action.page:
             await self._execute_scroll(section.action.page)
@@ -174,8 +168,8 @@ class Assistant(Agent):
     @function_tool(
         description="Call this EVERY TIME the user gives an answer to your checkpoint question. Evaluates if they understood and give instructions on what to do next."
     )
-    async def checkpoint_passed(self, student_understood: bool) -> str:
-        """Evaluate the student's response to the question."""
+    async def check_user_understanding(self, student_understood: bool) -> str:
+        """Evaluate the student's understanding or response to the question to decide whether to proceed or reexplain."""
 
         async def finish_section(message: str) -> str:
             section.question.completed = True
@@ -187,7 +181,10 @@ class Assistant(Agent):
                 return f"{message} {next_section.id}."
 
             if self.current_plan.is_complete:
-                return "[SUCCESS] All sections covered. Congratulate the student on completing this topic. Ask them if they want to explore another topic or if they have any other questions."  # noqa: E501
+                if self.current_plan.topic_sequence_number >= self.number_of_topics:
+                    return "[CHAPTER_COMPLETE] All sections of the final topic covered. This was the last topic in the chapter. Congratulate the student warmly on completing the entire chapter! Ask if they have any final questions."
+                next_topic_num = self.current_plan.topic_sequence_number + 1
+                return f"[SUCCESS] All sections of this topic covered. The next topic is number {next_topic_num} in the chapter topics list. Congratulate the student on finishing this topic, then call get_explanation_plan with the next topic's slug, and then start the first section of the new topic using start_section tool."  # noqa: E501
             return "[SUCCESS] Done. All content covered."
 
         if self.current_plan is None:
@@ -204,8 +201,12 @@ class Assistant(Agent):
 
         if student_understood:
             self.checkpoint_answers_counter = 0
+            if section.question.type == "check_understanding":
+                return await finish_section(
+                    "[SUCCESS] Student understood the section. Acknowledge the student warmly, then continue with the next section:"
+                )
             return await finish_section(
-                "[SUCCESS] Checkpoint passed. Acknowledge the student warmly, then continue with the next section:"
+                "[SUCCESS] Checkpoint passed."
             )
         else:
             self.checkpoint_answers_counter += 1

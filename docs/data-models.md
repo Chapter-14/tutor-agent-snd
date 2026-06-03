@@ -13,6 +13,7 @@ Source of truth: `src/tutor_agent_snd/agents/tutor_agent.py`
 class ExplanationPlan:
     topic: str
     title: str
+    topic_sequence_number: int
     total_sections: int
     sections: list[Section]
     current_section_index: int = 0
@@ -22,6 +23,7 @@ class ExplanationPlan:
 
 - `topic` (str): The subject of the explanation plan.
 - `title` (str): Human-readable title of the loaded plan.
+- `topic_sequence_number` (int): The topic's order in the chapter (1 for first topic, 2 for second, etc.).
 - `total_sections` (int): Declared number of sections in the plan.
 - `sections` (list[Section]): The list of sections included in the plan.
 - `current_section_index` (int): Zero-based pointer to the active section.
@@ -78,6 +80,7 @@ class Question:
     type: str
     question: str
     expected_answer: str
+    choices: list[str]
     reexplain_guide: str
     completed: bool = False
     student_responded: bool = False
@@ -89,6 +92,7 @@ class Question:
 - `type` (str): Question type — `"check_understanding"` for comprehension checks or `"topic_checkpoint"` for topic-level assessments.
 - `question` (str): The question text.
 - `expected_answer` (str): What counts as an acceptable student response.
+- `choices` (list[str]): Multiple-choice options for the student. For `"check_understanding"` questions, this is `["Yes", "No"]`. For `"topic_checkpoint"` questions, this contains 4 options where one matches the `expected_answer`.
 - `reexplain_guide` (str): Recovery guidance for re-explaining the concept.
 - `completed` (bool): Marks whether the question was passed.
 - `student_responded` (bool): Marks whether a learner response has been captured.

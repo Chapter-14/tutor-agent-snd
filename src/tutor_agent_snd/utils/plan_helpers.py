@@ -7,7 +7,7 @@ from tutor_agent_snd.domain_types import (
     UpdateUIMarkers,
 )
 
-REQUIRED_PLAN_KEYS = {"topic", "title", "total_sections", "sections"}
+REQUIRED_PLAN_KEYS = {"topic", "title", "topic_sequence_number", "total_sections", "sections"}
 REQUIRED_SECTION_KEYS = {
     "id",
     "title",
@@ -60,6 +60,7 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
                     type=section_data["question"]["type"],
                     question=section_data["question"]["question"],
                     expected_answer=section_data["question"]["expected_answer"],
+                    choices=section_data["question"]["choices"],
                     reexplain_guide=section_data["question"]["reexplain_guide"],
                 )
 
@@ -84,6 +85,7 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
     return ExplanationPlan(
         topic=plan_data["topic"],
         title=plan_data["title"],
+        topic_sequence_number=plan_data["topic_sequence_number"],
         total_sections=plan_data["total_sections"],
         sections=sections,
     )
@@ -91,15 +93,15 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
 
 def format_section_prompt(section: Section) -> str:
     prompt = "\n---CONTENT---\n"
-    prompt += f"[Section_Title]:{section.title}\n\n"
-    prompt += f"[Tone]: {section.agent_guidance}\n\n"
-    prompt += f"[Visual_Description]: {section.visual_description}\n\n"
-    prompt += f"[Strategy]:\n"
+    prompt += f"[Section_Title] {section.title}\n\n"
+    prompt += f"[Tone] {section.agent_guidance}\n\n"
+    prompt += f"[Visual_Description] {section.visual_description}\n\n"
+    prompt += "[Strategy]\n"
     for i, strategy_point in enumerate(section.strategy, 1):
         prompt += f"{i}. {strategy_point}\n"
 
     if section.question:
         prompt += "\n"
-        prompt += f"[Ask]: {section.question.question}\n"
-        prompt += f"[Expected]: {section.question.expected_answer}\n"
+        prompt += f"[Ask] {section.question.question}\n"
+        prompt += f"[Expected] {section.question.expected_answer}\n"
     return prompt
