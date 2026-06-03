@@ -20,10 +20,12 @@ class Assistant(Agent):
         chapter_id: str,
         dynamic_prompt: str,
         system_prompt: str,
+        number_of_topics: int,
     ):
         self.job_ctx = job_ctx
         self.course_id = course_id
         self.chapter_id = chapter_id
+        self.number_of_topics = number_of_topics
         self.current_plan: ExplanationPlan | None = None
         self.checkpoint_answers_counter = 0
 
@@ -160,7 +162,7 @@ class Assistant(Agent):
         await self._send_current_section(section.title)
         await self._remove_markers(section.markers.remove if section.markers else [])
         await self._add_markers(section.markers.add if section.markers else [])
-        if self.current_plan.current_section.question:
+        if self.current_plan.current_section.question and self.current_plan.current_section.question.type == "topic_checkpoint":
             await self._send_section_checkpoint(self.current_plan.current_section.question.question)
 
         if section.action and section.action.type == "scroll" and section.action.page:
@@ -185,7 +187,7 @@ class Assistant(Agent):
                 return f"{message} {next_section.id}."
 
             if self.current_plan.is_complete:
-                return "[SUCCESS] All content covered. Congratulate the student on completing this topic."
+                return "[SUCCESS] All sections covered. Congratulate the student on completing this topic. Ask them if they want to explore another topic or if they have any other questions."  # noqa: E501
             return "[SUCCESS] Done. All content covered."
 
         if self.current_plan is None:
@@ -211,4 +213,4 @@ class Assistant(Agent):
                 return await finish_section(
                     "[MAX_RETRIES] Student didn't pass after 2 attempts. Explain the correct answer yourself, then continue with the next section:"
                 )
-            return f"[HINT] Re-explain using: {section.question.reexplain_guide}. Then ask again and wait."
+            return f"[GUIDE] Re-explain using: {section.question.reexplain_guide}. Then ask again and wait."

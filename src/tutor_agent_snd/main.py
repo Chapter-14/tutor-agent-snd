@@ -89,7 +89,7 @@ async def entrypoint(ctx: agents.JobContext):
     language = participant.attributes.get("language", "Arabic")
     user_name = participant.attributes.get("user_name", "undefined")
 
-    dynamic_prompt = await parse_d_prompt(user_name, course_id, chapter_id, language)
+    dynamic_prompt, number_of_topics = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
     # Language code mapping for TTS
     ln_code = {
@@ -214,6 +214,7 @@ async def entrypoint(ctx: agents.JobContext):
             chapter_id=chapter_id,
             dynamic_prompt=dynamic_prompt,
             system_prompt=system_prompt_obj.prompt,
+            number_of_topics=number_of_topics,
         ),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(

@@ -37,4 +37,5 @@ Chapter number: {chapter_topics_data['chapter_number']}
 # Output Language:
 All your responses must be in {language}.
 """
-    return d_prompt
+    number_of_topics = chapter_topics_data["number_of_topics"]
+    return d_prompt, number_of_topics

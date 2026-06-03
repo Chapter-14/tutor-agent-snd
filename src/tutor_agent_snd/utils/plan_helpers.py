@@ -91,10 +91,10 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
 
 def format_section_prompt(section: Section) -> str:
     prompt = "\n---CONTENT---\n"
-    prompt += f"{section.title}\n\n"
+    prompt += f"[Section_Title]:{section.title}\n\n"
     prompt += f"[Tone]: {section.agent_guidance}\n\n"
-    prompt += f"[Scene]: {section.visual_description}\n\n"
-    prompt += "[Cover]:\n"
+    prompt += f"[Visual_Description]: {section.visual_description}\n\n"
+    prompt += f"[Strategy]:\n"
     for i, strategy_point in enumerate(section.strategy, 1):
         prompt += f"{i}. {strategy_point}\n"
 
