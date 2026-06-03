@@ -113,10 +113,10 @@ class Assistant(Agent):
     # Agent tools
 
     @function_tool(
-        description="""Fetch the explanation plan for a topic. Only use after the user explicitly states what they want to study in the current session."""
+        description="""Fetches the explanation plan for a topic. Use this when the user asks for a new topic, OR when the check_user_understanding tool instructs you to auto-advance to the next topic."""
     )
     async def get_explanation_plan(self, topic: str) -> str:
-        """Fetches and loads the structured explanation plan for a topic."""
+        """Fetches and loads the structured explanation plan for a topic. Returns the ID of the first section to start."""
 
         plan_json = await fetch_md_from_bunny(
             f"courses/{self.course_id}/{self.chapter_id}/{topic}.json"
@@ -130,9 +130,11 @@ class Assistant(Agent):
 
         return f"[SUCCESS] Loaded. Begin with {first_section.id}."
 
-    @function_tool(description="Begin explaining a section. You must complete sections in order.")
+    @function_tool(
+        description="""Begin explaining a section. You must complete sections in order. Call this immediately after get_explanation_plan or when instructed to proceed by check_user_understanding."""
+    )
     async def start_section(self, section_id: str) -> str:
-        """Begin explaining a section. You must complete sections in order."""
+        """Loads the content, guidance, and checkpoint question for a specific section."""
 
         self.checkpoint_answers_counter = 0
 
@@ -166,10 +168,10 @@ class Assistant(Agent):
         return f"[SUCCESS]\n{section_prompt}"
 
     @function_tool(
-        description="Call this EVERY TIME the user gives an answer to your checkpoint question. Evaluates if they understood and give instructions on what to do next."
+        description="""Call this EVERY TIME the user responds to your checkpoint question. Evaluates if they understood (or replied 'yes' for mid-sections) and dictates the next step: re-explain, move to the next section, or auto-advance to the next topic."""
     )
     async def check_user_understanding(self, student_understood: bool) -> str:
-        """Evaluate the student's understanding or response to the question to decide whether to proceed or reexplain."""
+        """Evaluate the student's understanding or response to the checkpoint question to decide whether to proceed or re-explain."""
 
         async def finish_section(message: str) -> str:
             section.question.completed = True
