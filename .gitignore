@@ -12,3 +12,4 @@ docker-compose.yml
 AGENTS.md
 contexts/
 contexts
+docs/sample_traces/

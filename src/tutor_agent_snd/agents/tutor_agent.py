@@ -37,7 +37,7 @@ class Assistant(Agent):
 
     async def on_enter(self):
         await self.session.generate_reply(
-            instructions="""Great the user by their name. Then ask the user to choose a topic to explore from the list that they can see on the screen (without giving any examples) or ask any other question."""
+            instructions="""Great the user by their name. Then ask the user to choose a topic to explore from the list that will appear on the screen after you finish talking (without giving any examples) or ask any other question."""
         )
 
     # Frontend communication helpers
@@ -109,32 +109,8 @@ class Assistant(Agent):
             if section.id == section_id:
                 return section
         return None
-
-    # Agent tools
-
-    @function_tool(
-        description="""Fetches the explanation plan for a topic. Use this when the user asks for a new topic, OR when the check_user_understanding tool instructs you to auto-advance to the next topic."""
-    )
-    async def get_explanation_plan(self, topic: str) -> str:
-        """Fetches and loads the structured explanation plan for a topic. Returns the ID of the first section to start."""
-
-        plan_json = await fetch_md_from_bunny(
-            f"courses/{self.course_id}/{self.chapter_id}/{topic}.json"
-        )
-        plan_data = json.loads(plan_json)
-
-        self.current_plan = parse_plan(plan_data)
-        await self._send_current_topic(topic)
-
-        first_section = self.current_plan.sections[0]
-
-        return f"[SUCCESS] Loaded. Begin with {first_section.id}."
-
-    @function_tool(
-        description="""Begin explaining a section. You must complete sections in order. Call this immediately after get_explanation_plan or when instructed to proceed by check_user_understanding."""
-    )
-    async def start_section(self, section_id: str) -> str:
-        """Loads the content, guidance, and checkpoint question for a specific section."""
+    
+    async def _start_section(self, section_id: str) -> str:
 
         self.checkpoint_answers_counter = 0
 
@@ -165,7 +141,29 @@ class Assistant(Agent):
             await self._execute_scroll(section.action.page)
 
         section_prompt = format_section_prompt(section)
-        return f"[SUCCESS]\n{section_prompt}"
+        return f"{section_prompt}"
+
+    # Agent tools
+
+    @function_tool(
+        description="""Fetches the explanation plan for a topic. Use this when the user asks for a new topic, OR when the check_user_understanding tool instructs you to auto-advance to the next topic."""
+    )
+    async def get_explanation_plan(self, topic: str) -> str:
+        """Fetches and loads the structured explanation plan for a topic. Returns the ID of the first section to start."""
+
+        plan_json = await fetch_md_from_bunny(
+            f"courses/{self.course_id}/{self.chapter_id}/{topic}.json"
+        )
+        plan_data = json.loads(plan_json)
+
+        self.current_plan = parse_plan(plan_data)
+        await self._send_current_topic(topic)
+
+        first_section = self.current_plan.sections[0]
+        plan_text = await self._start_section(first_section.id)
+
+        return f"[SUCCESS] Topic's Plan Loaded. Fist say that you are going to start explaining this topic: {topic}, then continue with the first section explanation plan \n {plan_text}"
+    
 
     @function_tool(
         description="""Call this EVERY TIME the user responds to your checkpoint question. Evaluates if they understood (or replied 'yes' for mid-sections) and dictates the next step: re-explain, move to the next section, or auto-advance to the next topic."""
@@ -173,20 +171,21 @@ class Assistant(Agent):
     async def check_user_understanding(self, student_understood: bool) -> str:
         """Evaluate the student's understanding or response to the checkpoint question to decide whether to proceed or re-explain."""
 
-        async def finish_section(message: str) -> str:
+        async def finish_section(message: str = "") -> str:
             section.question.completed = True
             section.completed = True
             await self._send_section_done(section.title)
 
             if section.sequence < len(self.current_plan.sections):
                 next_section = self.current_plan.sections[section.sequence]
-                return f"{message} {next_section.id}."
+                next_section_plan = await self._start_section(next_section.id)
+                return f"{message} {next_section_plan}"
 
             if self.current_plan.is_complete:
                 if self.current_plan.topic_sequence_number >= self.number_of_topics:
                     return "[CHAPTER_COMPLETE] All sections of the final topic covered. This was the last topic in the chapter. Congratulate the student warmly on completing the entire chapter! Ask if they have any final questions."
                 next_topic_num = self.current_plan.topic_sequence_number + 1
-                return f"[SUCCESS] All sections of this topic covered. The next topic is number {next_topic_num} in the chapter topics list. Congratulate the student on finishing this topic, then call get_explanation_plan with the next topic's slug, and then start the first section of the new topic using start_section tool."  # noqa: E501
+                return f"[SUCCESS] All sections of this topic covered. The next topic is number {next_topic_num} in the chapter topics list. Congratulate the student on finishing this topic, then call get_explanation_plan with the next topic's slug."  # noqa: E501
             return "[SUCCESS] Done. All content covered."
 
         if self.current_plan is None:
@@ -205,15 +204,13 @@ class Assistant(Agent):
             self.checkpoint_answers_counter = 0
             if section.question.type == "check_understanding":
                 return await finish_section(
-                    "[SUCCESS] Student understood the section. Acknowledge the student warmly, then continue with the next section:"
+                    "[SUCCESS] Acknowledge the student warmly, then continue explaining with this next section plan:"
                 )
-            return await finish_section(
-                "[SUCCESS] Checkpoint passed."
-            )
+            return await finish_section()
         else:
             self.checkpoint_answers_counter += 1
             if self.checkpoint_answers_counter >= 2:
                 return await finish_section(
-                    "[MAX_RETRIES] Student didn't pass after 2 attempts. Explain the correct answer yourself, then continue with the next section:"
+                    "[MAX_RETRIES] Student didn't pass after 2 attempts. Explain the correct answer yourself, then continue explaining with this next section plan:"
                 )
             return f"[GUIDE] Re-explain using: {section.question.reexplain_guide}. Then ask again and wait."

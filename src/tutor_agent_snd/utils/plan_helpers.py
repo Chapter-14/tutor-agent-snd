@@ -92,7 +92,7 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
 
 
 def format_section_prompt(section: Section) -> str:
-    prompt = "\n---CONTENT---\n"
+    prompt = "\n---SECTION_EXPLANATION_PLAN_CONTENT---\n"
     prompt += f"[Section_Title] {section.title}\n\n"
     prompt += f"[Tone] {section.agent_guidance}\n\n"
     prompt += f"[Visual_Description] {section.visual_description}\n\n"

@@ -14,7 +14,7 @@ from livekit.plugins import (
     silero,
     cerebras,
     elevenlabs,
-    openai,
+    cartesia,
     noise_cancellation,
     deepgram,
 )
@@ -115,7 +115,11 @@ async def entrypoint(ctx: agents.JobContext):
         language=ln_code.get(language, "en"),
     )
 
-    f_tts = openai.TTS(model="tts-1")
+    f_tts = cartesia.TTS(
+        model="sonic-3.5",
+        voice="79f8b5fb-2cc8-479a-80df-29f7a7cf1a3e",  # English voice
+        language=ln_code.get(language, "en"),
+    )
 
     tts_with_fallback = agents.tts.FallbackAdapter(
         tts=(
