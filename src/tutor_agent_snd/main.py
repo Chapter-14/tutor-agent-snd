@@ -88,6 +88,7 @@ async def entrypoint(ctx: agents.JobContext):
     chapter_id = participant.attributes.get("chapter_id", "ch_1")
     language = participant.attributes.get("language", "Arabic")
     user_name = participant.attributes.get("user_name", "undefined")
+    user_id = participant.attributes.get("user_id", "undefined")
 
     dynamic_prompt, number_of_topics = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
@@ -159,15 +160,16 @@ async def entrypoint(ctx: agents.JobContext):
     tts_with_fallback.on("tts_availability_changed", on_tts_availability_changed)
 
     # Langfuse and Custom Metrics Collection
-    entropy = random.randint(10000, 99999)
-    session_id = f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else ctx.room.name
+    # entropy = random.randint(10000, 99999) # f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else
+    session_id = ctx.room.name
 
     trace_provider, langfuse = setup_langfuse(
         metadata={
             "langfuse.session.id": session_id,
             "langfuse.user.name": user_name,
-        },
-        environment=ENVIRONMENT,
+            "langfuse.user.id": f"{"-".join(user_name.lower().split())}_{user_id[20:]}",
+            "langfuse.environment": ENVIRONMENT,
+        }
     )
 
     prompt_label = "latest" if ENVIRONMENT != "production" else "production"

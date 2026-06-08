@@ -33,7 +33,6 @@ def setup_langfuse(
     public_key = public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
     secret_key = secret_key or os.getenv("LANGFUSE_SECRET_KEY")
     host = host or os.getenv("LANGFUSE_HOST") or os.getenv("LANGFUSE_BASE_URL")
-    environment = environment or os.getenv("LANGFUSE_TRACING_ENVIRONMENT")
 
     if not public_key or not secret_key or not host:
         raise ValueError(
@@ -49,7 +48,6 @@ def setup_langfuse(
         base_url=host,
         tracer_provider=trace_provider,
         should_export_span=lambda span: True,
-        environment=environment,
     )
 
     return trace_provider, langfuse
