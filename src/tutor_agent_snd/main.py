@@ -159,8 +159,6 @@ async def entrypoint(ctx: agents.JobContext):
 
     tts_with_fallback.on("tts_availability_changed", on_tts_availability_changed)
 
-    # Langfuse and Custom Metrics Collection
-    # entropy = random.randint(10000, 99999) # f"{ctx.room.name}_{entropy}" if ENVIRONMENT != "production" else
     session_id = ctx.room.name
 
     trace_provider, langfuse = setup_langfuse(
@@ -200,6 +198,13 @@ async def entrypoint(ctx: agents.JobContext):
             value=total_cost,
             session_id=session_id,
             comment="Total cost including base infrastructure and model usage",
+            data_type="NUMERIC",
+        )
+        langfuse.create_score(
+            name="total_session_time",
+            value=total_duration / 60,  # convert to minutes
+            session_id=session_id,
+            comment="Total session time in minutes",
             data_type="NUMERIC",
         )
         trace_provider.force_flush()

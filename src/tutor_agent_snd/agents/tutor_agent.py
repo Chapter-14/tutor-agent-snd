@@ -86,7 +86,7 @@ class Assistant(Agent):
             section_markers[marker.id] = {
                 "type": marker.type,
                 "page": marker.page,
-                "span_id": marker.span_id,
+                "text": marker.text,
                 "delay": marker.delay,
             }
         payload = json.dumps({"action": "add_markers", "add": section_markers})
