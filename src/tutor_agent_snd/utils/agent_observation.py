@@ -15,8 +15,9 @@ PRICING = {
     "deepgram": {"nova-3": {"second": 0.0000966667}},
     "munsit": {"munsit-en-ar": {"second": 0.000833333}, "munsit": {"second": 0.000833333}},
     "api.cerebras.ai": {
-        "zai-glm-4.7": {"input": 0.00000225, "output": 0.000000275},
+        "zai-glm-4.7": {"input": 0.00000225, "output": 0.00000275},
         "gpt-oss-120b": {"input": 0.000000175, "output": 0.000000350},
+        "gemma-4-31b": {"input": 0.00000099, "output": 0.00000145},
     },
     "groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
 }

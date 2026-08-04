@@ -99,8 +99,8 @@ async def entrypoint(ctx: agents.JobContext):
     }
 
     # LLM setup with fallback mechanism
-    p_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
-    f_llm = cerebras.LLM(model="gpt-oss-120b", temperature=0.3)
+    p_llm = cerebras.LLM(model="gemma-4-31b", temperature=0.3)
+    f_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
         llm=(
