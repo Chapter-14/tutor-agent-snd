@@ -45,7 +45,7 @@ def parse_plan(plan_data: dict) -> ExplanationPlan:
                             id=m["id"],
                             type=m["type"],
                             page=m["page"],
-                            text=m["text"],
+                            span_id=m["span_id"],
                             delay=m["delay"],
                         )
                         for m in section_data["markers"].get("add", [])

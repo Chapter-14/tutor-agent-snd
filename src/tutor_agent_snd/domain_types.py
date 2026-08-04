@@ -12,7 +12,7 @@ class UIMarker:
     id: str  # Unique identifier with scheme m_{page}_{span_id}
     type: str  # "highlight" | "circle" | "underline" | "point"
     page: int
-    text: str
+    span_id: int
     delay: int  # milliseconds delay before showing marker
 
 
