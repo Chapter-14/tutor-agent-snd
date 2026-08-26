@@ -1,0 +1,164 @@
+{
+  "lesson_slug": "five_step_revenue_recognition",
+  "title": "The Five-Step Revenue Recognition Process",
+  "lesson_sequence_number": 1,
+  "total_topics": 7,
+  "topics": [
+    {
+      "id": "revenue-recognition-overview",
+      "title": "Purpose and Overview of the Five-Step Process",
+      "sequence": 1,
+      "requires_completion_of": null,
+      "action": {
+        "type": "scroll",
+        "page": 6
+      },
+      "content": "Introduce the model as one connected process. Explain that revenue should depict the transfer of promised goods or services for the consideration the company expects to receive. Use the Airbus agreement to sell airplanes to Cathay Pacific for 100 million euros as the running example.\n\nTeaching board guidance:\n1. Set the title to 'Five-Step Revenue Recognition'.\n2. Add the step 'Identify the customer contract' and connect it to the Airbus agreement.\n3. Add the step 'Identify performance obligations' and explain that airplane delivery is the promise in the basic example.\n4. Add the step 'Determine the transaction price' and state that the example has a fixed price of 100 million euros.\n5. Add the step 'Allocate the transaction price' and explain that the single obligation receives the full price.\n6. Add the step 'Recognize revenue when the obligation is satisfied' and explain that delivery transfers control.\n\nSummarize the chain as contract, promises, price, allocation, and recognition. Continue speaking naturally after every board update.",
+      "question": {
+        "id": "revenue-recognition-overview-check",
+        "type": "check_understanding",
+        "question": "Does the overall flow from identifying the contract to recognizing revenue make sense so far?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Use a simple sale: confirm the agreement, identify what was promised, determine and allocate the price, then record revenue only when the promise is fulfilled."
+      }
+    },
+    {
+      "id": "identify-customer-contract",
+      "title": "Step 1: Identify the Contract with Customers",
+      "sequence": 2,
+      "requires_completion_of": "revenue-recognition-overview",
+      "action": {
+        "type": "scroll",
+        "page": 13
+      },
+      "content": "Teach the contract criteria as a decision gate rather than an isolated list. Explain that the parties must approve the arrangement, commit to perform, expect commercial substance, identify each party's rights and payment terms, and conclude that collection is probable. Contracts may be written, oral, or implied, but revenue is not recognized until a qualifying contract exists and performance occurs. Contrast a qualifying contract with a wholly unperformed arrangement that either party can terminate without compensation.\n\nTeaching board guidance: clear the board, set the title to 'Step 1: Customer Contract', then add the bullets 'Approved and commercially substantive', 'Rights and payment terms are identifiable', and 'Collection is probable'. Relate each bullet to whether the arrangement is enforceable and collectible.",
+      "question": {
+        "id": "identify-customer-contract-check",
+        "type": "check_understanding",
+        "question": "Does it make sense why an approved agreement alone is not enough unless the rights, payment terms, and probable collection are also clear?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Compare a firm order with clear goods, price, and likely payment against a vague discussion that either party can abandon without consequence."
+      }
+    },
+    {
+      "id": "identify-performance-obligations",
+      "title": "Step 2: Identify Separate Performance Obligations",
+      "sequence": 3,
+      "requires_completion_of": "identify-customer-contract",
+      "action": {
+        "type": "scroll",
+        "page": 25
+      },
+      "content": "Focus on the meaning of a distinct promise and the effect of interdependence. A performance obligation is a promise to transfer a distinct good or service, and the customer must be able to benefit from it. Use SoftTech to show that a license and extensive customization can form one integrated output and therefore one obligation. Use Chen Computer to show that an extended service warranty sold separately is a second obligation. Finish with the test: identify each promise, decide whether it is distinct, and determine whether it is independent or part of one integrated output.\n\nTechnical terms introduced in this topic: performance obligation; distinct.\n\nTeaching board guidance: clear the board, set the title to 'Step 2: Performance Obligations', add a short definition, then contrast 'Combine interdependent promises' with 'Separate independent promises'. Emphasize the independent-promises item during the final contrast. Do not read source slides verbatim.",
+      "question": {
+        "id": "identify-performance-obligations-check",
+        "type": "check_understanding",
+        "question": "Does the difference between a distinct independent promise and an interdependent combined promise make sense?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Use a computer example: an assurance warranty supports the computer and stays with that obligation, while an optional extended service warranty can be purchased separately and is its own obligation."
+      }
+    },
+    {
+      "id": "determine-transaction-price",
+      "title": "Step 3: Determine the Transaction Price",
+      "sequence": 4,
+      "requires_completion_of": "identify-performance-obligations",
+      "action": {
+        "type": "scroll",
+        "page": 29
+      },
+      "content": "Explain transaction price as the consideration the company expects in exchange for transferring goods or services. Distinguish fixed consideration from variable consideration such as discounts, rebates, bonuses, and royalties. Explain that a significant financing component separates sales revenue from interest, non-cash consideration is generally measured at fair value, and payments to customers usually reduce revenue. Contrast probability-weighted expected value with the single most likely amount. Use Peabody briefly: the probability-weighted estimate is 147,500 dollars, while the single most likely outcome is 150,000 dollars.\n\nTechnical terms introduced in this topic: transaction price; variable consideration; expected value; most likely amount.\n\nTeaching board guidance: clear the board, set the title to 'Step 3: Transaction Price', add short bullets for variable consideration, time value of money, and non-cash or customer consideration, then add one sentence contrasting the two estimation methods. Keep the calculation conversational.",
+      "question": {
+        "id": "determine-transaction-price-check",
+        "type": "check_understanding",
+        "question": "Does the difference between the probability-weighted expected value and the single most likely amount make sense?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Describe expected value as averaging all outcomes using their probabilities, while most likely amount chooses the one outcome with the highest probability."
+      }
+    },
+    {
+      "id": "allocate-transaction-price",
+      "title": "Step 4: Allocate the Transaction Price",
+      "sequence": 5,
+      "requires_completion_of": "determine-transaction-price",
+      "action": {
+        "type": "scroll",
+        "page": 43
+      },
+      "content": "Explain allocation using relative standalone selling prices. Start with a numerical example: standalone prices of 80 and 20 create an 80 percent and 20 percent split, so a transaction price of 90 is allocated as 72 and 18. An observable separate selling price is the best evidence. When prices are unavailable, explain the adjusted market assessment, expected cost plus margin, and residual approaches. Emphasize that allocation is needed only when a contract contains more than one performance obligation.\n\nTechnical terms introduced in this topic: standalone selling price.\n\nTeaching board guidance: clear the board, set the title to 'Step 4: Allocate the Price', then add the steps 'Find each standalone selling price', 'Calculate each relative proportion', and 'Apply the proportions to the transaction price'. Add one short note about estimation methods. Keep arithmetic conversational.",
+      "question": {
+        "id": "allocate-transaction-price-check",
+        "type": "check_understanding",
+        "question": "Does allocating the total price according to relative standalone selling prices make sense?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Use a 100-dollar bundle containing items normally sold for 75 dollars and 25 dollars. Their relative values allocate 75 dollars and 25 dollars."
+      }
+    },
+    {
+      "id": "recognize-revenue",
+      "title": "Step 5: Recognize Revenue When the Obligation Is Satisfied",
+      "sequence": 6,
+      "requires_completion_of": "allocate-transaction-price",
+      "action": {
+        "type": "scroll",
+        "page": 46
+      },
+      "content": "Center the explanation on transfer of control. Explain that satisfying the performance obligation triggers recognition, not merely signing or billing. For point-in-time recognition, discuss indicators such as rights to payment, legal title, physical possession, risks and rewards, and customer acceptance. For over-time recognition, explain that revenue follows progress as control transfers continuously, using measures such as cost-to-cost and units delivered. Return to Airbus: delivery transfers control and triggers recognition of the 100 million euros. Do not add rules absent from the course material.\n\nTechnical terms introduced in this topic: transfer of control; point in time; over time.\n\nTeaching board guidance: clear the board, set the title to 'Step 5: Recognize Revenue', add a short control-transfer statement, then contrast 'Point in time' with 'Over time' and add one short note about faithful progress measurement.",
+      "question": {
+        "id": "recognize-revenue-check",
+        "type": "check_understanding",
+        "question": "Does it make sense that revenue recognition depends on when control transfers rather than simply when the contract is signed?",
+        "expected_answer": "Yes",
+        "choices": [
+          "Yes",
+          "No"
+        ],
+        "reexplain_guide": "Contrast signing an order today with delivering the product next month. The contract begins the arrangement, but revenue is recognized when the customer obtains control."
+      }
+    },
+    {
+      "id": "five-step-process-summary",
+      "title": "Apply the Complete Five-Step Process",
+      "sequence": 7,
+      "requires_completion_of": "recognize-revenue",
+      "action": {
+        "type": "scroll",
+        "page": 48
+      },
+      "content": "Synthesize the model as a decision chain rather than reteaching every detail. Connect Steps 1 and 2 as establishing the accounting unit through the contract and distinct promises. Connect Steps 3 and 4 as measuring the expected consideration and assigning it to obligations. Connect Step 5 to recording revenue as control transfers. Apply the whole chain to Airbus: qualifying contract, airplane-delivery obligation, 100 million euro transaction price, full allocation to that obligation, and recognition on delivery. Stress that this sequence prevents recognition before the company has identified, measured, and satisfied its promise.\n\nTeaching board guidance: clear the board, set the title to 'Revenue Recognition Summary', and add one concise bullet for each of the three connected groups above. Prepare the student for the authored final question.",
+      "question": {
+        "id": "five-step-process-final-checkpoint",
+        "type": "topic_checkpoint",
+        "question": "In the five-step model, when should a company recognize the revenue allocated to a performance obligation?",
+        "expected_answer": "When the performance obligation is satisfied and the customer obtains control of the promised good or service.",
+        "choices": [
+          "When the contract is first discussed",
+          "When the company sends an invoice",
+          "When the performance obligation is satisfied and the customer obtains control",
+          "When the company estimates the transaction price"
+        ],
+        "reexplain_guide": "Return to the final step: the contract, obligations, price, and allocation prepare the accounting, but revenue is recorded only when the related promise is fulfilled and control transfers."
+      }
+    }
+  ]
+}

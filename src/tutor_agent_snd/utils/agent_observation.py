@@ -1,12 +1,13 @@
-import os
 import json
+import os
 
 from langfuse import Langfuse
+from livekit.agents.metrics import ModelUsage, TTSMetrics
+from livekit.agents.telemetry import set_tracer_provider
+from livekit.agents.telemetry import tracer as lk_tracer
+from livekit.agents.voice.events import MetricsCollectedEvent
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.util.types import AttributeValue
-from livekit.agents.telemetry import set_tracer_provider, tracer as lk_tracer
-from livekit.agents.metrics import ModelUsage, TTSMetrics
-from livekit.agents.voice.events import MetricsCollectedEvent
 
 # Define pricing models (not provided by LiveKit)
 PRICING = {

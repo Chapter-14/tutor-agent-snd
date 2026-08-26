@@ -12,4 +12,9 @@ docker-compose.yml
 AGENTS.md
 contexts/
 contexts
+!contexts/
+contexts/*
+!contexts/handoff/
+contexts/handoff/*
+!contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md
 docs/sample_traces/

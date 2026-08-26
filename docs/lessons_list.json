@@ -1,0 +1,12 @@
+{
+  "chapter": "Revenue Recognition",
+  "chapter_number": 18,
+  "number_of_lessons": 1,
+  "lessons": [
+    {
+      "name": "The Five-Step Revenue Recognition Process",
+      "brief": "Identify contracts and obligations, determine and allocate transaction prices, and recognize revenue when control transfers.",
+      "slug": "five_step_revenue_recognition"
+    }
+  ]
+}

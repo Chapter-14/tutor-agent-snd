@@ -1,271 +1,259 @@
-# Explanation Plan Execution
+# Lesson Plan Execution
 
-This document describes the process for executing an explanation plan, including all tools, their sequence, and detailed state management.
+This document describes the implemented lesson/topic state machine, its model-callable tools, and
+the frontend data contract.
 
-Source of truth: `src/tutor_agent_snd/agents/tutor_agent.py`
+Sources of truth:
 
-## Flow Diagram
+- `src/tutor_agent_snd/agents/tutor_agent.py`
+- `src/tutor_agent_snd/utils/plan_helpers.py`
+- `src/tutor_agent_snd/utils/parse_dynamic_prompt.py`
+
+## Execution Overview
 
 ```mermaid
-graph TD
-    A[Topic Selected] -->|Fetch Plan| B[get_explanation_plan(topic)]
-    B -->|Load Section| C[start_section(section_id)]
-    C -->|Remove old markers| C1[_remove_markers]
-    C1 -->|Add new markers| C2[_add_markers]
-    C2 --> D[Explain Strategy Points + Ask Checkpoint]
-    D -->|Student Responds| E[checkpoint_passed(student_understood)]
-    E -->|Evaluate Understanding| F{Understood?}
-    F -->|Yes| G[Mark Question Complete]
-    F -->|No| H[Return HINT + Re-explain]
-    G -->|More Sections| C
-    G -->|Last Section| I[Topic Complete]
-    H --> D
+flowchart TD
+    A[Student selects an approved lesson] --> B[get_lesson_plan]
+    B --> C[Validate and load LessonPlan]
+    C --> D[Clear board and publish set_lesson]
+    D --> E[Activate first Topic]
+    E --> F[Publish set_topic and optional scroll]
+    F --> G[Return unchanged content]
+    G --> H{Authored question?}
+    H -->|Yes| I[Append private assessment packet]
+    I --> J[Teach, ask authored question, and wait]
+    J --> K[check_topic_understanding]
+    K -->|Needs retry| J
+    K -->|Complete| L[Publish topic_done]
+    H -->|No| M[Teach and ask if ready]
+    M --> N[advance_to_next_topic]
+    N --> L
+    L --> O{More topics?}
+    O -->|Yes| E
+    O -->|No| P{More lessons?}
+    P -->|Yes| Q[Wait, then load returned next lesson slug]
+    P -->|No| R[Chapter complete]
 ```
 
-## Tool Descriptions
+The runtime activates the next topic as part of successful topic completion. The progression tool
+therefore returns the next topic's content directly; the model must teach that returned content
+without making another advancement call.
 
-### 1. `get_explanation_plan(topic)`
+## Tool API
 
-- **Purpose**: Fetches the JSON explanation plan for the selected topic from Bunny Storage. As a side effect, it also notifies the frontend of the current topic being explained.
-- **Parameters**:
-  - `topic` (str): The topic to fetch content for.
-- **Return Value**: Success/error string with execution guidance.
+The `Assistant` exposes exactly four tutoring tools.
 
-### 2. `start_section(section_id)`
+### `get_lesson_plan(lesson)`
 
-- **Purpose**: Prepares the section for execution, including validating prerequisites, processing UI marker transitions, and auto-scrolling.
-- **Parameters**:
-  - `section_id` (str): The section ID to start.
-- **Side Effects** (in order):
-  1. Sends a `set_section` UI control command.
-  2. Sends a `remove_markers` UI control command if the section defines markers with a `remove` list.
-  3. Sends an `add_markers` UI control command if the section defines markers with an `add` list.
-  4. Sends a `set_checkpoint` UI control command if the section has a question.
-  5. Sends a `scroll` UI control command if the section action type is `"scroll"`.
-- **Return Value**: `[SUCCESS]`/`[ERROR]` formatted string including section prompt content.
+Loads an approved lesson and activates its first topic.
 
-### 3. `checkpoint_passed(student_understood)`
+| Item | Behavior |
+| --- | --- |
+| Input | Exact lesson slug from the ordered chapter catalog. |
+| Storage read | `courses/{course_id}/{chapter_id}/{lesson}.json` |
+| Validation | Exact plan schema, matching slug, and matching catalog sequence. |
+| State | Replaces `current_plan` only after fetch, JSON parsing, and plan validation succeed. |
+| UI | Clears the board, publishes `set_lesson`, publishes first `set_topic`, then performs optional scroll. |
+| Return | First topic content, with a private assessment packet only when its question is present. |
 
-- **Purpose**: Processes the student's response and provides hints if needed.
-- **Parameters**:
-  - `student_understood` (bool): Whether the student understood the material.
-- **Return Value**: `[SUCCESS]`, `[ERROR]`, or `[HINT]` guidance string.
+Unknown slugs are rejected before storage access. A mismatched plan slug or lesson sequence is also
+rejected.
 
-### 4. `scroll_to_page(page_number)`
+The tool checks interruption state before the fetch, after plan validation, during the board clear,
+and before replacing the active plan. It does not retry an interrupted load.
 
-- **Purpose**: Sends a UI scroll command.
-- **Parameters**:
-  - `page_number` (int): The page number to scroll to.
-- **Return Value**: Success string.
+### `advance_to_next_topic()`
 
-## State Transitions
+Completes a questionless topic when the student is ready.
 
-1. **Plan Loading**
-   - `current_plan` is set to the fetched `ExplanationPlan`.
+| Condition | Result |
+| --- | --- |
+| No active topic | Error; no progress. |
+| Active topic has a question | Error directing the model to `check_topic_understanding`. |
+| Active topic is already complete | Error; no duplicate completion. |
+| Valid questionless topic | Mark complete, publish `topic_done`, and activate or resolve what follows. |
 
-2. **Section Execution**
-   - `current_section_index` is aligned to the section sequence.
-   - The section is marked `started = True` when execution begins.
+This tool must never be used to bypass an authored question.
 
-3. **Marker Transition**
-   - When a section defines `markers` (`UpdateUIMarkers`), the agent processes the transition in two ordered steps:
-     1. **Remove**: Sends marker IDs from `markers.remove` to the frontend. This clears markers from previous sections that are no longer relevant.
-     2. **Add**: Sends marker definitions from `markers.add` to the frontend. Each marker includes its `id`, `type`, `page`, `span_id`, and `delay`.
-   - If a section has `markers = None`, no marker commands are sent. The frontend continues showing whatever markers it currently displays.
-   - Markers are not automatically cleared when a section completes. They persist until explicitly removed by a subsequent section's `remove` list or by a frontend navigation event.
+### `check_topic_understanding(student_understood)`
 
-4. **Checkpoint Handling**
-- `student_responded` is set when the learner answers.
-- If understood, question is marked complete and section completion event is published.
-   - If not understood, a `[HINT]` response is returned for guided retry.
+Records the model's semantic evaluation of an actual answer to the active authored question.
 
-5. **Completion**
-   - If more sections exist, the response instructs progression to the next section.
-   - On last section completion, the response instructs congratulating the learner.
+| Input or state | Result |
+| --- | --- |
+| No loaded lesson or no active question | Error; no progress. |
+| `student_understood=true` | Reset retry count, complete the topic, and activate or resolve what follows. |
+| First `false` | Return the authored `reexplain_guide`; remain on the topic and ask again. |
+| Second `false` | Complete the topic, return direction to explain the authored expected answer, and include what follows. |
 
-## Error Handling
+The model, not deterministic application code, decides the boolean by comparing the student's
+answer with the expected answer supplied in private context. Clarification requests and normal
+follow-up conversation are not answers and should not trigger this tool.
 
-### Prerequisite Validation
+### `update_teaching_board(action, text, item_id)`
 
-- Each section checks its `requires_completion_of` field to ensure prerequisites are met.
-- Errors:
-  - **Missing prerequisites**: Abort the section and notify the user.
+Performs one semantic board action. A successful call does not complete a topic and does not end the
+teaching turn.
 
-### Checkpoint Enforcement
+| Action | Arguments | Semantics |
+| --- | --- | --- |
+| `show` | no `text` or `item_id` | Show the board and preserve content. Repeated show is a no-op. |
+| `hide` | no `text` or `item_id` | Hide the board and preserve content. |
+| `clear` | no `text` or `item_id` | Remove title, content, and emphasis; preserve visibility. |
+| `set_title` | non-empty `text` | Replace the title and return a generated ID. |
+| `add_bullet` | non-empty `text` | Append a bullet and return a generated ID. |
+| `add_text` | non-empty `text` | Append normal text and return a generated ID. |
+| `add_step` | non-empty `text` | Append an ordered step and return a generated ID. |
+| `emphasize` | existing generated `item_id` | Emphasize an existing title or content item. |
 
-- A new section cannot be started while the current started section has an incomplete question.
-- Errors:
-  - **Skips Section**: Notify and revert.
+Title and add actions show the board automatically. Callers cannot supply IDs for newly created
+items. Title text is limited to 80 characters, each content item to 180 characters, and a board can
+hold at most six non-title content items. A new lesson clears board content before publishing lesson
+state.
 
-### Tool Sequence Enforcement
+Board events are skipped when the current tool turn is interrupted. If interruption occurs after an
+automatic `board_show` but before the content event, the board can be visible without the new item;
+the model must not claim that the item was added.
 
-- The tools must be executed in sequence (`get_explanation_plan` -> `start_section` -> `checkpoint_passed`).
-- Errors:
-  - **Out-of-order calls**: Raise exceptions and log the incident.
+## Topic Activation
 
-## Guardrails
+`_start_topic(topic_id)` is an internal helper, not a model-callable tool. It performs these steps:
 
-- **No Skipping**: Prevent skipping sections or questions.
-- **Default Hints**: Ensure hints are provided for all misunderstood questions.
+1. Reset the assessment retry counter.
+2. Require an active lesson and resolve the topic ID.
+3. Enforce `requires_completion_of` when present.
+4. Refuse to leave a started topic with an incomplete question.
+5. Mark the target topic started and set `current_topic_index = sequence - 1`.
+6. Publish `set_topic` with the title, one-based index, question text, and choices.
+7. Publish `scroll` when the topic has an authored scroll action.
+8. Return topic content, with the fixed private assessment packet only when needed.
+
+Questionless topics send an empty question string and an empty choices list to the frontend.
+
+## Content And Assessment Delivery
+
+`format_topic_content(topic)` preserves authored content exactly.
+
+| Topic shape | Returned model context |
+| --- | --- |
+| `question: null` | The unchanged `content` string. |
+| Question object | The unchanged `content` string, two newlines, then a fixed private assessment packet. |
+
+The packet contains the authored question, expected answer, choices, and re-explanation guide. Its
+control delimiters and labels are private. They are never spoken or displayed as tutoring content.
+
+The runtime does not parse the free-form content string. All factual explanation guidance,
+technical-term guidance, and optional teaching-board direction remain ordinary English content for
+the model to interpret.
+
+## Completion Behavior
+
+Completing an active topic does this in order:
+
+1. Set `topic.completed = True`.
+2. Mark its question complete when present.
+3. Publish `topic_done`.
+4. If another topic exists, activate it and return its content.
+5. If the lesson is complete and another lesson exists, return the next exact lesson slug without
+   loading it.
+6. If the final lesson is complete, return chapter completion.
+
+The next lesson requires a later `get_lesson_plan` call when the student is ready. The runtime does
+not automatically fetch it.
 
 ## Frontend Integration
 
-All UI commands are sent via LiveKit's `publish_data()` method with the topic `"ui-control"`. Each payload is a JSON object containing an `"action"` field that the frontend uses for routing.
+All events below are UTF-8 JSON published reliably on LiveKit topic `ui-control`.
 
-### General Payload Structure
+### Lesson And Topic Events
 
-```json
-{
-  "action": "<action_type>",
-  ...action-specific fields
-}
-```
-
-### Action Reference
-
-| Action | Purpose | Trigger |
-|--------|---------|---------|
-| `scroll` | Navigate to a specific page | Section has `action.type = "scroll"` |
-| `set_topic` | Notify frontend of active topic | `get_explanation_plan` called |
-| `set_section` | Notify frontend of active section | `start_section` called |
-| `set_checkpoint` | Display section question | Section has a question |
-| `section_done` | Mark section as completed | `checkpoint_passed` with success |
-| `add_markers` | Render visual markers on the page | Section defines `markers.add` |
-| `remove_markers` | Remove visual markers from the page | Section defines `markers.remove` |
-
-### Payload Formats
-
-#### Scroll
+#### `set_lesson`
 
 ```json
 {
-  "action": "scroll",
-  "page": 5
+  "action": "set_lesson",
+  "lesson": "revenue_recognition_model",
+  "number_of_topics": 2
 }
 ```
 
-- **`page`** (int): The page number to scroll to.
+`lesson` is the lesson slug. `number_of_topics` is the plan's declared and validated topic count.
 
-#### Topic Change
+#### `set_topic`
 
 ```json
 {
   "action": "set_topic",
-  "topic": "photosynthesis",
-  "number_of_sections": 4
+  "topic": "Objective of Revenue Recognition",
+  "current_topic_index": 1,
+  "question": "Why is signing a contract not enough by itself to recognize revenue?",
+  "choices": []
 }
 ```
 
-- **`topic`** (str): The slug identifying the current topic.
-- **`number_of_sections`** (int): Total sections in the plan (for progress display).
+`topic` is the human-readable topic title, not the topic ID. `current_topic_index` is one-based.
+For a questionless topic, `question` is `""` and `choices` is `[]`.
 
-#### Section Change
+#### `topic_done`
 
 ```json
 {
-  "action": "set_section",
-  "section": "Light-Dependent Reactions",
-  "current_section_index": 2
+  "action": "topic_done",
+  "topic": "Objective of Revenue Recognition"
 }
 ```
 
-- **`section`** (str): The human-readable section title.
-- **`current_section_index`** (int): 1-based index of the current section (for progress display).
+`topic` is the completed topic title.
 
-#### Checkpoint
+#### `scroll`
 
 ```json
 {
-  "action": "set_checkpoint",
-  "checkpoint_question": "What is the role of chlorophyll in photosynthesis?"
+  "action": "scroll",
+  "page": 6
 }
 ```
 
-- **`checkpoint_question`** (str): The question to display to the student.
+The page is always a positive integer validated from the topic action.
 
-#### Section Done
+### Teaching Board Events
+
+```json
+{"action": "board_show"}
+{"action": "board_hide"}
+{"action": "board_clear"}
+{"action": "board_set_title", "id": "board-set-title-...", "text": "Five-Step Model"}
+{"action": "board_add_bullet", "id": "board-add-bullet-...", "text": "Identify the contract"}
+{"action": "board_add_text", "id": "board-add-text-...", "text": "Revenue follows control."}
+{"action": "board_add_step", "id": "board-add-step-...", "text": "Determine the price"}
+{"action": "board_emphasize", "id": "board-add-step-..."}
+```
+
+IDs are opaque runtime-generated values. The frontend and model must preserve them exactly.
+
+### Session Limit Event
+
+The session watchdog can publish:
 
 ```json
 {
-  "action": "section_done",
-  "section": "Light-Dependent Reactions"
+  "action": "session_ending",
+  "message": "Session ending due to time limit."
 }
 ```
 
-- **`section`** (str): The title of the completed section.
+It then shuts down the session with draining enabled.
 
-#### Add Markers
+## Error And Ordering Rules
 
-```json
-{
-  "action": "add_markers",
-  "markers": {
-    "m_5_123": {
-      "type": "highlight",
-      "page": 5,
-      "span_id": 123,
-      "delay": 500
-    },
-    "m_5_456": {
-      "type": "circle",
-      "page": 5,
-      "span_id": 456,
-      "delay": 2000
-    }
-  }
-}
-```
-
-- **`markers`** (object): A map where each key is a marker ID (following the `m_{page}_{span_id}` convention) and each value describes the marker:
-  - **`type`** (str): Visual style — `"highlight"`, `"circle"`, `"underline"`, or `"point"`.
-  - **`page`** (int): The page where the marker appears.
-  - **`span_id`** (int): The target `<span>` element on the page.
-  - **`delay`** (int): Milliseconds to wait before showing the marker after the section starts.
-
-#### Remove Markers
-
-```json
-{
-  "action": "remove_markers",
-  "markers": ["m_3_100", "m_3_200"]
-}
-```
-
-- **`markers`** (array of str): List of marker IDs to remove from the frontend. The frontend should hide and dispose of these markers immediately upon receiving this command.
-
-### Marker Example — Full Section Transition
-
-The following example shows the sequence of payloads sent when transitioning from Section 1 to Section 2. Section 2 defines markers that remove highlights from the previous section and add new ones for the current content.
-
-**Step 1: Remove markers from previous section**
-
-```json
-{
-  "action": "remove_markers",
-  "markers": ["m_3_100", "m_3_200"]
-}
-```
-
-**Step 2: Add markers for current section**
-
-```json
-{
-  "action": "add_markers",
-  "markers": {
-    "m_5_300": {
-      "type": "highlight",
-      "page": 5,
-      "span_id": 300,
-      "delay": 0
-    },
-    "m_5_301": {
-      "type": "circle",
-      "page": 5,
-      "span_id": 301,
-      "delay": 1500
-    }
-  }
-}
-```
-
-This ensures the student's visual focus shifts from the previous section's elements to the current section's elements.
+- Only catalog slugs can be loaded.
+- Lesson JSON must pass exact-key and value validation before it becomes active.
+- Lesson slug and sequence must agree with the catalog.
+- Topic prerequisites point backward and must be complete before activation.
+- A topic with a pending question cannot be bypassed.
+- A questionless topic cannot be completed through assessment.
+- An assessed topic cannot be completed through questionless advancement.
+- A successful completion publishes `topic_done` once, then returns or activates what follows.
+- Tool status text and private assessment data are model control context, not student-facing output.
+- There is no section state, section event, schema-version branch, rendered chapter prompt, or legacy
+  translation step in this flow.

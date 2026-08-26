@@ -1,5 +1,10 @@
 # Current Tutor Agent Context and Constraints
 
+> **Historical document:** This file describes the retired topic/section and marker workflow. Do
+> not use it as the current runtime contract. The current lesson/topic contract is documented in
+> `docs/data-models.md`, `docs/explanation-plan-execution.md`, and
+> `contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md`.
+
 ## Purpose of This Document
 
 This document describes only the executable, uncommented behavior in:

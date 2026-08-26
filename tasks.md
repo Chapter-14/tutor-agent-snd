@@ -1,5 +1,9 @@
 # Sanad Natural Tutoring and Interactive Visual Cues
 
+> **Superseded plan:** This proposal was not implemented and its marker/schema design is no longer
+> valid. The implemented lesson/topic contract is documented in `docs/data-models.md` and the
+> content-generator migration contract is `contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md`.
+
 ## Purpose of This Document
 
 This is the complete implementation handoff for improving Sanad's tutoring behavior and visual

@@ -8,21 +8,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class UIMarker:
-    id: str  # Unique identifier with scheme m_{page}_{span_id}
-    type: str  # "highlight" | "circle" | "underline" | "point"
-    page: int
-    span_id: int
-    delay: int  # milliseconds delay before showing marker
-
-
-@dataclass
-class UpdateUIMarkers:
-    add: list[UIMarker]
-    remove: list[str]  # List of marker IDs to remove
-
-
-@dataclass
 class Question:
     id: str
     type: str
@@ -35,42 +20,39 @@ class Question:
 
 
 @dataclass
-class SectionAction:
+class TopicAction:
     type: str
     page: int | None = None
 
 
 @dataclass
-class Section:
+class Topic:
     id: str
     title: str
     sequence: int
     requires_completion_of: str | None
-    action: SectionAction | None
-    markers: UpdateUIMarkers | None
-    agent_guidance: str
-    visual_description: str
-    strategy: list[str]
+    action: TopicAction | None
+    content: str
     question: Question | None
     completed: bool = False
     started: bool = False
 
 
 @dataclass
-class ExplanationPlan:
-    topic: str
+class LessonPlan:
+    lesson_slug: str
     title: str
-    topic_sequence_number: int
-    total_sections: int
-    sections: list[Section]
-    current_section_index: int = -1
+    lesson_sequence_number: int
+    total_topics: int
+    topics: list[Topic]
+    current_topic_index: int = -1
 
     @property
-    def current_section(self) -> Section | None:
-        if 0 <= self.current_section_index < len(self.sections):
-            return self.sections[self.current_section_index]
+    def current_topic(self) -> Topic | None:
+        if 0 <= self.current_topic_index < len(self.topics):
+            return self.topics[self.current_topic_index]
         return None
 
     @property
     def is_complete(self) -> bool:
-        return all(s.completed for s in self.sections)
+        return all(topic.completed for topic in self.topics)

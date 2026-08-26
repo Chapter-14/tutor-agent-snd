@@ -1,14 +1,17 @@
-# LiveKit Voice Agent
+# Sanad LiveKit Voice Tutor
 
-A LiveKit-powered voice AI agent framework that demonstrates how to build realtime conversational AI with MCP (Model Context Protocol) server integration.
+A LiveKit-powered voice tutor that loads structured lesson plans from Bunny Storage, teaches one
+topic at a time, synchronizes study UI state, and supports an AI teaching board.
 
 ## Features
 
-- 🎤 Natural voice conversations with low latency
-- 🔄 Real-time voice interaction with interruption handling
-- 🛠️ Tool integration via MCP servers
-- 🎯 Multiple provider options (OpenAI, Deepgram, Cartesia, etc.)
-- 🔌 Extensible architecture for custom tools and agents
+- Natural voice conversations with low latency
+- Real-time voice interaction with interruption handling
+- English-authored lesson plans with English or Arabic tutoring output
+- Optional per-topic assessments and explicit questionless progression
+- Page scrolling and semantic teaching-board integration
+- Multiple provider options (OpenAI, Deepgram, Cartesia, and others)
+- Extensible architecture for custom tools and agents
 
 ## Prerequisites
 
@@ -71,18 +74,17 @@ uv run tutor-agent start
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   LiveKit   │──b─▶│ Voice Agent  │───▶│ MCP Servers │
-│   Client    │     │              │     │   (Tools)   │
-└─────────────┘     └──────────────┘     └─────────────┘
-                           │
-                    ┌──────┴──────┐
-                    │             │
-              ┌─────▼────┐  ┌────▼─────┐
-              │ Deepgram │  │  OpenAI  │
-              │   STT    │  │ LLM/TTS  │
-              └──────────┘  └──────────┘
+```text
++----------------+     +----------------+     +----------------+
+| LiveKit client | --> | Voice tutor    | --> | Bunny content  |
++----------------+     +----------------+     +----------------+
+                              |
+                    +---------+---------+
+                    |                   |
+              +-----v-----+       +-----v-----+
+              | Voice     |       | Frontend  |
+              | providers |       | UI events |
+              +-----------+       +-----------+
 ```
 
 ## Project Structure
@@ -91,38 +93,74 @@ The project now uses a `src/` package layout.
 
 ```text
 tutor-agent-snd/
-├── AGENTS.md
-├── Dockerfile
-├── livekit.toml
-├── pyproject.toml
-├── README.md
-├── contexts/
-│   ├── GEMINI.md
-│   ├── material/
-│   ├── output/
-│   └── prompts/
-├── docs/
-│   ├── architecture.md
-│   ├── data-models.md
-│   └── explanation-plan-execution.md
-└── src/
-  └── tutor_agent_snd/
-    ├── __init__.py
-    ├── __main__.py
-    ├── main.py
-    ├── agents/
-    │   └── tutor_agent.py
-    └── lib/
-      ├── bunny.py
-      └── setup_langfuse.py
+|-- AGENTS.md
+|-- Dockerfile
+|-- livekit.toml
+|-- pyproject.toml
+|-- README.md
+|-- contexts/
+|   |-- input/
+|   |-- output/
+|   `-- handoff/
+|       `-- CONTENT_PIPELINE_INTEGRATION_SPEC.md
+|-- docs/
+|   |-- architecture.md
+|   |-- agent-analysis.md
+|   |-- data-models.md
+|   `-- explanation-plan-execution.md
+|-- prompts/
+|   `-- snd-agent-system-prompt-v2.md
+`-- src/
+    `-- tutor_agent_snd/
+        |-- __init__.py
+        |-- __main__.py
+        |-- main.py
+        |-- domain_types.py
+        |-- agents/
+        |   `-- tutor_agent.py
+        `-- utils/
+            |-- agent_observation.py
+            |-- bunny.py
+            |-- parse_dynamic_prompt.py
+            `-- plan_helpers.py
 ```
 
 ### Important Files
 
 - `src/tutor_agent_snd/main.py`: LiveKit worker entrypoint and pipeline setup.
-- `src/tutor_agent_snd/agents/tutor_agent.py`: Tutor agent tools, plan flow, and UI-control publishing.
-- `src/tutor_agent_snd/lib/bunny.py`: Bunny Storage fetch helpers.
-- `src/tutor_agent_snd/lib/setup_langfuse.py`: Langfuse tracing setup.
+- `src/tutor_agent_snd/agents/tutor_agent.py`: Lesson/topic tools, teaching board, and UI publishing.
+- `src/tutor_agent_snd/domain_types.py`: `LessonPlan`, `Topic`, question, and action state.
+- `src/tutor_agent_snd/utils/plan_helpers.py`: Exact lesson JSON validation and topic formatting.
+- `src/tutor_agent_snd/utils/parse_dynamic_prompt.py`: Chapter lesson catalog loading.
+- `src/tutor_agent_snd/utils/bunny.py`: Bunny Storage fetch helper.
+- `src/tutor_agent_snd/utils/agent_observation.py`: Langfuse tracing and cost observation.
+- `prompts/snd-agent-system-prompt-v2.md`: Review artifact for manual prompt deployment.
+
+## Lesson Content
+
+The runtime reads chapter content from these Bunny Storage paths:
+
+```text
+courses/{course_id}/01_Course_Knowledge_Schema.md
+courses/{course_id}/{chapter_id}/lessons_list.json
+courses/{course_id}/{chapter_id}/{lesson_slug}.json
+```
+
+`lessons_list.json` contains English lesson names, briefs, and slugs. Each slug has one exact lesson
+JSON file containing ordered topics. A topic has one English free-form `content` string, an optional
+`scroll` action, and an optional question. Questionless topics advance only after the student is
+ready; assessed topics advance through answer evaluation.
+
+The runtime tools are `get_lesson_plan`, `advance_to_next_topic`,
+`check_topic_understanding`, and `update_teaching_board`. Frontend progress uses `set_lesson`,
+`set_topic`, `topic_done`, `scroll`, and `board_*` events.
+
+See [Data Models](docs/data-models.md),
+[Lesson Plan Execution](docs/explanation-plan-execution.md), and
+[Content Pipeline Integration](contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md).
+
+The repository prompt file is not deployed automatically. An operator must manually create and
+promote the corresponding `snd-agent-system-prompt` version in Langfuse.
 
 ## Voice Pipeline Configuration
 

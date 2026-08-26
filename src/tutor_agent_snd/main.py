@@ -1,35 +1,26 @@
 import asyncio
+import json
+import logging
 import os
 import random
 import time
-import json
 
 from dotenv import load_dotenv
+from livekit import agents
+from livekit.agents import AgentSession, TurnHandlingOptions, room_io
+from livekit.agents.telemetry import set_tracer_provider
+from livekit.agents.voice.events import MetricsCollectedEvent
+from livekit.plugins import cartesia, cerebras, deepgram, elevenlabs, noise_cancellation, silero
+
+from tutor_agent_snd.agents.tutor_agent import Assistant
+from tutor_agent_snd.utils.agent_observation import (
+    calculate_cost,
+    collect_custom_metrics,
+    setup_langfuse,
+)
+from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
 load_dotenv(".env")
-
-import logging
-from livekit import agents
-from livekit.plugins import (
-    silero,
-    cerebras,
-    elevenlabs,
-    cartesia,
-    noise_cancellation,
-    deepgram,
-)
-from livekit.agents import AgentSession, room_io, TurnHandlingOptions, ChatMessage
-from livekit.agents.voice.events import MetricsCollectedEvent
-from livekit.agents.telemetry import set_tracer_provider
-
-
-from tutor_agent_snd.utils.agent_observation import (
-    setup_langfuse,
-    collect_custom_metrics,
-    calculate_cost,
-)
-from tutor_agent_snd.agents.tutor_agent import Assistant
-from tutor_agent_snd.utils.parse_dynamic_prompt import parse_d_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +81,7 @@ async def entrypoint(ctx: agents.JobContext):
     user_name = participant.attributes.get("user_name", "undefined")
     user_id = participant.attributes.get("user_id", "undefined")
 
-    dynamic_prompt, number_of_topics = await parse_d_prompt(user_name, course_id, chapter_id, language)
+    dynamic_prompt, lesson_slugs = await parse_d_prompt(user_name, course_id, chapter_id, language)
 
     # Language code mapping for TTS
     ln_code = {
@@ -99,12 +90,12 @@ async def entrypoint(ctx: agents.JobContext):
     }
 
     # LLM setup with fallback mechanism
-    p_llm = cerebras.LLM(model="gemma-4-31b", temperature=0.3)
-    f_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3)
+    p_llm = cerebras.LLM(model="gemma-4-31b", temperature=0.3, parallel_tool_calls=False)
+    f_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3, parallel_tool_calls=False)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
         llm=(
-            [p_llm, f_llm] if ENVIRONMENT == "production" else [f_llm, p_llm]
+            [p_llm, f_llm] if ENVIRONMENT == "production" else [p_llm, p_llm]
         ),  # order matters: first is primary
         max_retry_per_llm=1,
     )
@@ -124,7 +115,7 @@ async def entrypoint(ctx: agents.JobContext):
 
     tts_with_fallback = agents.tts.FallbackAdapter(
         tts=(
-            [p_tts, f_tts] if ENVIRONMENT == "production" else [f_tts, p_tts]
+            [p_tts, f_tts] if ENVIRONMENT == "production" else [p_tts, p_tts]
         ),  # order matters: first is primary
         max_retry_per_tts=1,  # tune retries before switching
     )
@@ -135,6 +126,7 @@ async def entrypoint(ctx: agents.JobContext):
         llm=llm_with_fallback,  # openai.LLM(model="gpt-5-mini", temperature=0.3),
         tts=tts_with_fallback,
         vad=silero.VAD.load(activation_threshold=0.6, min_speech_duration=0.3),
+        max_tool_steps=8,
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={
@@ -165,7 +157,7 @@ async def entrypoint(ctx: agents.JobContext):
         metadata={
             "langfuse.session.id": session_id,
             "langfuse.user.name": user_name,
-            "langfuse.user.id": f"{"-".join(user_name.lower().split())}_{user_id[20:]}",
+            "langfuse.user.id": f"{'-'.join(user_name.lower().split())}_{user_id[20:]}",
             "langfuse.environment": ENVIRONMENT,
         }
     )
@@ -225,7 +217,7 @@ async def entrypoint(ctx: agents.JobContext):
             chapter_id=chapter_id,
             dynamic_prompt=dynamic_prompt,
             system_prompt=system_prompt_obj.prompt,
-            number_of_topics=number_of_topics,
+            lesson_slugs=lesson_slugs,
         ),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
