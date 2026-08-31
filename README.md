@@ -106,6 +106,7 @@ tutor-agent-snd/
 |-- docs/
 |   |-- architecture.md
 |   |-- agent-analysis.md
+|   |-- current-board-director-architecture.md
 |   |-- data-models.md
 |   `-- explanation-plan-execution.md
 |-- prompts/
@@ -118,6 +119,11 @@ tutor-agent-snd/
         |-- domain_types.py
         |-- agents/
         |   `-- tutor_agent.py
+        |-- board/
+        |   |-- director.py
+        |   |-- models.py
+        |   |-- runtime.py
+        |   `-- state.py
         `-- utils/
             |-- agent_observation.py
             |-- bunny.py
@@ -128,7 +134,8 @@ tutor-agent-snd/
 ### Important Files
 
 - `src/tutor_agent_snd/main.py`: LiveKit worker entrypoint and pipeline setup.
-- `src/tutor_agent_snd/agents/tutor_agent.py`: Lesson/topic tools, teaching board, and UI publishing.
+- `src/tutor_agent_snd/agents/tutor_agent.py`: Conversational lesson/topic tools and board integration.
+- `src/tutor_agent_snd/board/`: Board planning, state, pacing, validation, and publication.
 - `src/tutor_agent_snd/domain_types.py`: `LessonPlan`, `Topic`, question, and action state.
 - `src/tutor_agent_snd/utils/plan_helpers.py`: Exact lesson JSON validation and topic formatting.
 - `src/tutor_agent_snd/utils/parse_dynamic_prompt.py`: Chapter lesson catalog loading.
@@ -151,11 +158,13 @@ JSON file containing ordered topics. A topic has one English free-form `content`
 `scroll` action, and an optional question. Questionless topics advance only after the student is
 ready; assessed topics advance through answer evaluation.
 
-The runtime tools are `get_lesson_plan`, `advance_to_next_topic`,
-`check_topic_understanding`, and `update_teaching_board`. Frontend progress uses `set_lesson`,
+The Tutor runtime tools are `get_lesson_plan`, `advance_to_next_topic`, and
+`check_topic_understanding`. A separate non-speaking Board Director proposes visual operations while
+deterministic board code validates, paces, and publishes them. Frontend progress uses `set_lesson`,
 `set_topic`, `topic_done`, `scroll`, and `board_*` events.
 
-See [Data Models](docs/data-models.md),
+See [Current Board Director Architecture](docs/current-board-director-architecture.md),
+[Data Models](docs/data-models.md),
 [Lesson Plan Execution](docs/explanation-plan-execution.md), and
 [Content Pipeline Integration](contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md).
 
