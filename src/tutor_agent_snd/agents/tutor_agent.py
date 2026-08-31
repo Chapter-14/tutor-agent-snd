@@ -1,42 +1,20 @@
 import json
 import logging
-from typing import Literal
-from uuid import uuid4
+from collections.abc import AsyncIterable
 
-from livekit import agents
-from livekit.agents import Agent, RunContext
+from livekit import agents, rtc
+from livekit.agents import Agent, ModelSettings, RunContext
 from livekit.agents.llm import function_tool
+from livekit.agents.voice.speech_handle import SpeechHandle
 
+from tutor_agent_snd.board.models import BoardOp, TopicContext
+from tutor_agent_snd.board.runtime import DEFAULT_WORDS_PER_SECOND, BoardRuntime, SupportsPlan
+from tutor_agent_snd.board.state import BOARD_TITLE_MAX_LENGTH
 from tutor_agent_snd.domain_types import LessonPlan, Topic
 from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
 from tutor_agent_snd.utils.plan_helpers import format_topic_content, parse_plan
 
 logger = logging.getLogger(__name__)
-
-BoardAction = Literal[
-    "show",
-    "hide",
-    "clear",
-    "set_title",
-    "add_bullet",
-    "add_text",
-    "add_step",
-    "emphasize",
-]
-
-BOARD_TITLE_MAX_LENGTH = 80
-BOARD_ITEM_MAX_LENGTH = 180
-BOARD_CONTENT_ITEM_LIMIT = 6
-BOARD_ACTIONS = {
-    "show",
-    "hide",
-    "clear",
-    "set_title",
-    "add_bullet",
-    "add_text",
-    "add_step",
-    "emphasize",
-}
 
 
 ## Main Agent Definition
@@ -51,6 +29,8 @@ class Assistant(Agent):
         dynamic_prompt: str,
         system_prompt: str,
         lesson_slugs: list[str],
+        board_director: SupportsPlan,
+        board_words_per_second: float = DEFAULT_WORDS_PER_SECOND,
     ) -> None:
         self.job_ctx = job_ctx
         self.course_id = course_id
@@ -58,10 +38,13 @@ class Assistant(Agent):
         self.lesson_slugs = lesson_slugs
         self.current_plan: LessonPlan | None = None
         self.checkpoint_answers_counter = 0
-        self._board_visible = False
-        self._board_title_id: str | None = None
-        self._board_content_ids: set[str] = set()
-        self._board_emphasized_id: str | None = None
+        self.board_runtime = BoardRuntime(
+            publish=self._publish_ui_control,
+            director=board_director,
+            context_provider=self._topic_context,
+            is_interrupted=self._speech_interrupted,
+            words_per_second=board_words_per_second,
+        )
 
         super().__init__(
             instructions=f"{system_prompt}\n{dynamic_prompt}",
@@ -70,85 +53,72 @@ class Assistant(Agent):
     # Flow control methods
 
     async def on_enter(self) -> None:
+        await self.board_runtime.start()
         await self.session.generate_reply(
             instructions="""Greet the user by name. Then ask them to choose a lesson from the list that will appear on screen after you finish speaking, without listing examples aloud."""
         )
 
+    # Teaching board plumbing
+
+    def tts_node(
+        self, text: AsyncIterable[str], model_settings: ModelSettings
+    ) -> AsyncIterable[rtc.AudioFrame]:
+        """Tee the outgoing speech to the Board Director without altering it."""
+
+        teed = self.board_runtime.tee(text, self._speech_id())
+        return Agent.default.tts_node(self, teed, model_settings)
+
+    def _speech_id(self) -> str | None:
+        speech = self._current_speech()
+        return speech.id if speech is not None else None
+
+    def _speech_interrupted(self) -> bool:
+        speech = self._current_speech()
+        return speech is not None and speech.interrupted
+
+    def _current_speech(self) -> SpeechHandle | None:
+        try:
+            return self.session.current_speech
+        except RuntimeError:  # no active activity, e.g. during teardown
+            return None
+
+    def _topic_context(self) -> TopicContext:
+        topic = self.current_plan.current_topic if self.current_plan else None
+        if topic is None:
+            return TopicContext()
+        return TopicContext(topic_title=topic.title, topic_content=topic.content)
+
     # Frontend communication helpers
 
-    async def _publish_board_event(
-        self,
-        action: BoardAction,
-        *,
-        run_context: RunContext | None = None,
-        item_id: str | None = None,
-        text: str | None = None,
-    ) -> bool:
-        if run_context and run_context.speech_handle.interrupted:
-            return False
-
-        payload = {"action": f"board_{action}"}
-        if item_id is not None:
-            payload["id"] = item_id
-        if text is not None:
-            payload["text"] = text
-
+    async def _publish_ui_control(self, payload: dict) -> None:
         await self.job_ctx.room.local_participant.publish_data(
             json.dumps(payload), reliable=True, topic="ui-control"
         )
 
-        topic = self.current_plan.current_topic if self.current_plan else None
-        logger.info(
-            "Teaching board updated",
-            extra={
-                "board_action": action,
-                "course_id": self.course_id,
-                "chapter_id": self.chapter_id,
-                "lesson_id": self.current_plan.lesson_slug if self.current_plan else None,
-                "topic_id": topic.id if topic else None,
-                "board_item_id": item_id,
-            },
-        )
-        return True
+    async def _reframe_board(self, title: str | None) -> None:
+        """Reset the board at a concept boundary. Deterministic: no LLM involved."""
 
-    async def _show_board(self, run_context: RunContext | None = None) -> bool:
-        if self._board_visible:
-            return True
-        if not await self._publish_board_event("show", run_context=run_context):
-            return False
-        self._board_visible = True
-        return True
-
-    async def _clear_board(self, run_context: RunContext | None = None) -> bool:
-        if not await self._publish_board_event("clear", run_context=run_context):
-            return False
-        self._board_title_id = None
-        self._board_content_ids.clear()
-        self._board_emphasized_id = None
-        return True
+        ops = [BoardOp(action="clear")]
+        if title:
+            ops.append(BoardOp(action="set_title", text=title[:BOARD_TITLE_MAX_LENGTH]))
+        await self.board_runtime.publish_now(ops)
 
     async def _execute_scroll(self, page_number: int) -> None:
-        payload = json.dumps({"action": "scroll", "page": page_number})
-        await self.job_ctx.room.local_participant.publish_data(
-            payload, reliable=True, topic="ui-control"
-        )
+        await self._publish_ui_control({"action": "scroll", "page": page_number})
 
     async def _send_current_lesson(self) -> None:
         assert self.current_plan is not None
-        payload = json.dumps(
+        await self._publish_ui_control(
             {
                 "action": "set_lesson",
                 "lesson": self.current_plan.lesson_slug,
                 "number_of_topics": self.current_plan.total_topics,
             }
         )
-        await self.job_ctx.room.local_participant.publish_data(
-            payload, reliable=True, topic="ui-control"
-        )
 
     async def _send_current_topic(self, topic: str, question: str, choices: list[str]) -> None:
         assert self.current_plan is not None
-        payload = json.dumps(
+        await self._publish_ui_control(
             {
                 "action": "set_topic",
                 "topic": topic,
@@ -157,15 +127,9 @@ class Assistant(Agent):
                 "choices": choices,
             }
         )
-        await self.job_ctx.room.local_participant.publish_data(
-            payload, reliable=True, topic="ui-control"
-        )
 
     async def _send_topic_done(self, topic: str) -> None:
-        payload = json.dumps({"action": "topic_done", "topic": topic})
-        await self.job_ctx.room.local_participant.publish_data(
-            payload, reliable=True, topic="ui-control"
-        )
+        await self._publish_ui_control({"action": "topic_done", "topic": topic})
 
     # Plan management helpers
 
@@ -199,6 +163,7 @@ class Assistant(Agent):
 
         topic.started = True
         self.current_plan.current_topic_index = topic.sequence - 1
+        await self._reframe_board(topic.title)
         question = topic.question
         await self._send_current_topic(
             topic.title,
@@ -244,102 +209,6 @@ class Assistant(Agent):
 
     # Agent tools
 
-    @function_tool(
-        description="""Updates the teaching board with one short visual teaching action. A successful update does not end the teaching turn; continue explaining unless student input is required."""
-    )
-    async def update_teaching_board(
-        self,
-        run_context: RunContext,
-        action: BoardAction,
-        text: str | None = None,
-        item_id: str | None = None,
-    ) -> str:
-        """Update the teaching board during an explanation.
-
-        Args:
-            run_context: LiveKit context for the current tool call.
-            action: Semantic board action to perform.
-            text: Short text required by title and add actions.
-            item_id: Existing generated item ID required by emphasize.
-        """
-
-        if run_context.speech_handle.interrupted:
-            return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-
-        if action not in BOARD_ACTIONS:
-            return "[ERROR] Unsupported teaching board action."
-
-        if action in {"show", "hide", "clear"} and (text is not None or item_id is not None):
-            return f"[ERROR] The {action} action does not accept text or item_id."
-
-        if action == "show":
-            if not await self._show_board(run_context):
-                return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-            return "[SUCCESS] Teaching board shown. Continue the current explanation."
-
-        if action == "hide":
-            if not await self._publish_board_event("hide", run_context=run_context):
-                return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-            self._board_visible = False
-            return "[SUCCESS] Teaching board hidden. Continue the current explanation."
-
-        if action == "clear":
-            if not await self._clear_board(run_context):
-                return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-            return "[SUCCESS] Teaching board cleared. Continue the current explanation."
-
-        if action == "emphasize":
-            if text is not None or not item_id:
-                return "[ERROR] The emphasize action requires item_id and does not accept text."
-            if item_id not in self._board_content_ids and item_id != self._board_title_id:
-                return "[ERROR] Cannot emphasize an item that is not on the teaching board."
-            if not await self._publish_board_event(
-                "emphasize", run_context=run_context, item_id=item_id
-            ):
-                return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-            self._board_emphasized_id = item_id
-            return "[SUCCESS] Board item emphasized. Continue the current explanation."
-
-        if item_id is not None:
-            return f"[ERROR] The {action} action uses a generated ID; do not provide item_id."
-        if text is None or not text.strip():
-            return f"[ERROR] The {action} action requires non-empty text."
-
-        normalized_text = text.strip()
-        text_limit = BOARD_TITLE_MAX_LENGTH if action == "set_title" else BOARD_ITEM_MAX_LENGTH
-        if len(normalized_text) > text_limit:
-            return f"[ERROR] Board text exceeds the {text_limit}-character limit. Shorten it."
-
-        if action != "set_title" and len(self._board_content_ids) >= BOARD_CONTENT_ITEM_LIMIT:
-            return (
-                f"[ERROR] The teaching board already has {BOARD_CONTENT_ITEM_LIMIT} content items. "
-                "Clear it before adding more."
-            )
-
-        if not await self._show_board(run_context):
-            return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-
-        generated_id = f"board-{action.replace('_', '-')}-{uuid4().hex}"
-        if not await self._publish_board_event(
-            action,
-            run_context=run_context,
-            item_id=generated_id,
-            text=normalized_text,
-        ):
-            return "[INTERRUPTED] Board update skipped. Do not retry during this turn."
-
-        if action == "set_title":
-            if self._board_emphasized_id == self._board_title_id:
-                self._board_emphasized_id = None
-            self._board_title_id = generated_id
-        else:
-            self._board_content_ids.add(generated_id)
-
-        return (
-            f"[SUCCESS] Teaching board updated with item_id={generated_id}. "
-            "Continue the current explanation."
-        )
-
     @function_tool(description="Loads an approved lesson and activates its first topic.")
     async def get_lesson_plan(self, run_context: RunContext, lesson: str) -> str:
         """Fetch and load one lesson plan.
@@ -367,10 +236,6 @@ class Assistant(Agent):
         if new_plan.lesson_sequence_number != expected_sequence:
             return "[ERROR] Lesson sequence does not match the chapter lesson list."
 
-        if run_context.speech_handle.interrupted:
-            return "[INTERRUPTED] Lesson load skipped. Do not retry during this turn."
-        if not await self._clear_board(run_context):
-            return "[INTERRUPTED] Lesson load skipped. Do not retry during this turn."
         if run_context.speech_handle.interrupted:
             return "[INTERRUPTED] Lesson load skipped. Do not retry during this turn."
 

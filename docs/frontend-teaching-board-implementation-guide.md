@@ -1,214 +1,202 @@
-# Frontend Implementation Guide: AI Teaching Board
+# Frontend Migration Guide: Teaching Board on the Board Director Architecture
 
 ## Goal
 
-Implement the V1 AI Teaching Board in the frontend repository:
+The V1 teaching board is **already implemented and working** in the frontend prototype:
 
 ```text
-/home/moaz/dev/work/chapter-14/sanad/web-client-snd
+/home/moaz/dev/work/chapter-14/sanad/test-web-client
 ```
 
-The LiveKit agent implementation is complete. Do not change the Python agent or add another
-realtime channel. The frontend must render semantic board updates received through the existing
-LiveKit `ui-control` data topic.
+That implementation was built against the previous agent, where the tutor LLM called a board tool
+once per visual action. The agent has since been restructured: the board is now driven by a
+**Board Director**, a second non-speaking LLM that watches the tutor's outgoing speech, emits
+batched board operations, and hands them to a deterministic executor that paces them against the
+explanation before publishing.
 
-For broader product context and non-MVP ideas, see
-`../tutor-agent-snd/docs/sanad_ai_teaching_board_feature.md`.
+This document covers **only the delta**. It is not a build guide. Do not rebuild the reducer, the
+component, the layout, or the event parser.
 
-## Agent Event Contract
+## What Does Not Change
 
-The implemented payload uses `action`, not `type`. Packets are UTF-8 JSON sent reliably and in
-order on the `ui-control` topic.
+The wire contract is byte-for-byte identical. Everything below is already correct and must be left
+alone:
 
-```ts
-type BoardControlEvent =
-  | { action: "board_show" }
-  | { action: "board_hide" }
-  | { action: "board_clear" }
-  | { action: "board_set_title"; id: string; text: string }
-  | { action: "board_add_bullet"; id: string; text: string }
-  | { action: "board_add_text"; id: string; text: string }
-  | { action: "board_add_step"; id: string; text: string }
-  | { action: "board_emphasize"; id: string };
-```
+- `src/lib/teaching-board.ts` — `BoardState`, `parseBoardControlEvent`, `teachingBoardReducer`.
+  The action names, payload shapes, id semantics, six-item cap, and 80/180 character limits all
+  still match the agent exactly.
+- `src/components/study/teaching-board.tsx` — title, bullet, text, numbered step, exclusive
+  emphasis, entry animation, `dir="auto"`, `prefers-reduced-motion`.
+- `src/app/(app)/study/page.tsx` — the `lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]` split,
+  `min-w-0` / `min-h-0` handling, and the hidden-when-absent board column.
+- The guarded `JSON.parse` and board-event-first dispatch in `session-manager.tsx`.
+- `board_reset` on session start, disconnect, and teardown in `agent-launcher.tsx`.
+- The progression protocol. `set_lesson`, `set_topic` (carrying `current_topic_index`, `question`,
+  `choices`), and `topic_done` are already the agent's vocabulary. No renaming is needed.
 
-Example payloads:
+The agent never sends coordinates, never sends `generation_id`, and still expects no
+acknowledgement. Board ids remain opaque backend strings.
+
+---
+
+## 1. Delete the Dead Marker Path
+
+The agent no longer sends slide markers at all. `add_markers` and `remove_markers` are gone from the
+agent's vocabulary, so this code can never run again.
+
+Remove:
+
+- the `add_markers` and `remove_markers` branches in `session-manager.tsx`, and the
+  `pendingTimeouts` ref plus its `clearTimeout` cleanup that exist only to serve them;
+- `markerPayload` and `UIMarkersUpdates` in `src/types/types.ts`, and the `add` / `remove` fields on
+  `UIControlData`;
+- `activeMarker` / `setActiveMarker` state in `src/app/(app)/study/page.tsx`, the prop threading
+  through `agent-launcher.tsx` and `session-manager.tsx`, and the `activeMarker` prop on
+  `PdfCanvas`.
+
+`scroll` and `session_ending` are unaffected and stay exactly as they are.
+
+---
+
+## 2. `board_hide` Is Now Unreachable
+
+`show` and `hide` were deliberately removed from the Board Director's vocabulary — visibility is
+owned by agent-side code, not by a model. In practice the agent now emits:
+
+- `board_show` exactly once, implicitly, with the first content item of the session;
+- `board_hide` **never**.
+
+Once the board appears it stays visible for the rest of the session, and `board_reset` on disconnect
+returns it to hidden. Seven of the eight actions are reachable.
+
+Keep the `board_hide` branch in the reducer — it costs nothing and keeps the reducer a total
+function over the documented contract — but do not build UI that depends on the agent hiding the
+board, and do not treat a permanently visible board as a bug.
+
+---
+
+## 3. Handle the Automatic Topic Frame
+
+This is the one change with a visible UI consequence.
+
+Every topic start now emits, deterministically and with no LLM involved:
 
 ```json
-{"action":"board_show"}
-{"action":"board_set_title","id":"board-set-title-...","text":"TCP"}
-{"action":"board_add_bullet","id":"board-add-bullet-...","text":"Reliable delivery"}
-{"action":"board_add_text","id":"board-add-text-...","text":"TCP confirms packet delivery."}
-{"action":"board_add_step","id":"board-add-step-...","text":"Establish the connection"}
-{"action":"board_emphasize","id":"board-add-bullet-..."}
 {"action":"board_clear"}
-{"action":"board_hide"}
+{"action":"board_set_title","id":"board-set-title-…","text":"<topic title>"}
 ```
 
-Apply these semantics exactly:
+These are two separate data packets, so they arrive as two `RoomEvent.DataReceived` events and
+almost certainly produce two renders. Between them the board is visible, has no title, and has no
+items.
 
-- `board_show`: show the board and preserve all content.
-- `board_hide`: hide the board and preserve all content.
-- `board_clear`: remove the title and all content, clear emphasis, and preserve visibility.
-- `board_set_title`: replace the existing title; there can be only one title.
-- `board_add_*`: append a content item in packet arrival order.
-- `board_emphasize`: emphasize the matching title or content item and remove emphasis from every
-  other item.
-- Title and add events should also make the board visible. The agent normally sends `board_show`
-  first, but handling this in the reducer keeps the UI robust.
-- IDs are opaque backend-generated strings. Never generate, parse, or modify them in the frontend.
-- Ignore duplicate add events, unknown actions, malformed payloads, missing fields, over-limit
-  content, and emphasis for an unknown ID. Never let an invalid packet crash the study session.
+The reducer already handles this correctly — `board_clear` preserves `visible`, so the column does
+not collapse — but verify the render:
 
-Agent-enforced limits should also be treated as frontend validation boundaries:
+- The `<h3>` title block unmounts on `board_clear` and remounts on `board_set_title`. Because it is
+  keyed by `state.title.id`, the enter animation replays, which is the desired effect at a topic
+  boundary.
+- Confirm the header does not visibly jump as the title element is removed and re-added. Reserving
+  the title row's height, or animating only opacity rather than layout, is enough if it does.
+- Do not add a placeholder, skeleton, or "loading" state for the gap. It is a few milliseconds.
 
-- One title.
-- At most six non-title content items.
-- Title text: at most 80 characters after trimming.
-- Bullet, text, and step text: at most 180 characters after trimming.
+---
 
-## Existing Integration Points
+## 4. Expect a Different Event Cadence
 
-Use the current structure rather than creating a parallel session architecture:
+Events no longer arrive one per tutor tool call. The Director plans in batches and the executor
+paces them against the spoken explanation:
 
-- `src/app/(app)/[course]/[chapter]/study/page.tsx` owns the slide canvas and should own board
-  state because the board is rendered beside the PDF.
-- `src/components/study/agent-launcher.tsx` creates the LiveKit session and should pass the board
-  dispatcher to `SessionManager`.
-- `src/components/study/session-manager.tsx` already handles `RoomEvent.DataReceived` for the
-  `ui-control` topic. Extend this handler with board events.
-- `src/components/study/pdfCanvas.tsx` renders the current slide viewer. Keep its scrolling,
-  carousel, markers, zoom, and controls working when its width changes.
-- `src/types/types.ts` contains `UIControlData` and component prop types. Add the board event fields
-  or use a separate discriminated board event type.
+- **Small bursts.** Two or three items can arrive within a few hundred milliseconds. The entry
+  animation must absorb that without layout thrash. Do **not** stagger entry with JavaScript timers
+  — the agent already paces the stream against speech, and adding client-side delay would
+  double-pace it and desynchronise the board from the voice.
+- **Long quiet stretches.** Most sentences produce no event. In a representative turn the Director
+  returned an empty plan for half its windows. A visible board holding a title and two bullets is a
+  normal steady state, not a stalled one.
+- **Nothing after an interruption.** When the student interrupts, pending operations are cancelled
+  agent-side. Already-rendered items stay; simply stop expecting more.
+- **A realistic timeline**, measured end to end on a 28-second explanation whose text the tutor LLM
+  generated in 0.7 seconds:
 
-## Recommended Files
+  ```text
+  t= 0.0s  board_clear
+  t= 0.0s  board_show
+  t= 0.0s  board_set_title    Transport Layer: TCP
+  t= 3.3s  board_add_bullet   Reliable delivery
+  t= 7.1s  board_add_bullet   Ordering
+  t=12.9s  board_add_bullet   Connection oriented
+  ```
 
-Keep the implementation small:
+---
+
+## 5. Mixed Arabic and English Is Now the Common Case
+
+The Director mirrors the tutor's own wording rather than translating it. In an Arabic session the
+tutor keeps technical terms in English, so a single board routinely holds both scripts:
 
 ```text
-src/components/study/teaching-board.tsx
-src/lib/teaching-board.ts
+Transport Layer: TCP
+• Reliable delivery
+• الترتيب
+• Connection oriented
+• Handshake
 ```
 
-`src/lib/teaching-board.ts` should contain the board types, initial state, runtime event guard, and
-pure reducer. `teaching-board.tsx` should only render the state with normal React/DOM elements.
-Do not use an HTML canvas or a whiteboard library.
+`dir="auto"` is already applied per item and to the title, which resolves each item independently
+and is the correct behaviour. What to verify now that this is routine rather than exceptional:
 
-Suggested state:
+- bullet markers and step badges sit on the correct side for each item individually, so a list can
+  legitimately have mixed marker sides;
+- an English item inside an otherwise Arabic board does not break the `text-start` alignment of its
+  neighbours;
+- long Latin technical terms wrap rather than overflow the narrower board column.
+
+Board text arrives pre-normalised: trimmed, sentence-cased for Latin script, and within the length
+limits. The frontend should not re-case, re-trim, or truncate it.
+
+---
+
+## 6. Fix Step Numbering for English Sessions
+
+`teaching-board.tsx` hardcodes the step number locale:
 
 ```ts
-type BoardItemType = "title" | "bullet" | "text" | "step";
-
-type BoardItem = {
-  id: string;
-  type: BoardItemType;
-  text: string;
-};
-
-type BoardState = {
-  visible: boolean;
-  title: BoardItem | null;
-  items: BoardItem[];
-  emphasizedId: string | null;
-};
+const stepNumberFormatter = new Intl.NumberFormat("ar-SA");
 ```
 
-Do not store derived step numbers or an `emphasized` flag on every item. Derive step numbers during
-rendering and compare each item ID with `emphasizedId`.
+This renders step 1 as `١` regardless of session language, which is wrong for an English session.
+The session language is chosen in `agent-launcher.tsx` and passed to the agent as a participant
+attribute; thread it through to `TeachingBoard` and select the locale from it, or fall back to the
+default locale formatter when the session is English.
 
-## Implementation Steps
+---
 
-1. Add the board model, parser/type guard, initial state, and reducer.
-2. Add reducer tests before connecting it to LiveKit.
-3. Create `TeachingBoard` with separate rendering for title, bullet, text, and numbered step items.
-4. In the study page, initialize the reducer and place the PDF and board in one responsive content
-   region.
-5. Pass the reducer dispatcher through `AgentLauncher` to `SessionManager`.
-6. In the existing `DataReceived` listener, safely decode and parse JSON. If the topic is
-   `ui-control` and the value is a valid board event, dispatch it and return. Preserve all existing
-   scroll, topic, section, marker, checkpoint, and session-ending behavior.
-7. Dispatch a local reset action on session disconnect so a new session starts with a hidden,
-   empty board.
-8. Run lint, type checking, tests, and a production build.
+## Verification
 
-Do not use unguarded `JSON.parse`. Wrap decoding/parsing in `try/catch`, verify the parsed value is a
-non-null object, and narrow board events at runtime before dispatching.
+Run against the agent on the `003-improve-agent-plans` branch with the Board Director active.
 
-## Layout and Visual Behavior
+Board behaviour:
 
-- Hidden board: the PDF uses the full content width.
-- Visible board on desktop: use a responsive two-column layout with approximately 65–70% for the
-  PDF and 30–35% for the board.
-- Visible board on narrow screens: stack the board below the PDF in the same scrollable content
-  region. Do not squeeze either surface into an unusable width.
-- Keep the agent/session controls visible and usable in both layouts.
-- Add `min-w-0` and `min-h-0` where needed so the existing carousel can resize without horizontal
-  overflow.
-- The board may scroll internally when its content does not fit, but the six-item limit should keep
-  this uncommon.
-- Render the board with semantic DOM elements. A `section` with an accessible label is sufficient.
-- Use stable backend IDs as React keys.
-- Use `dir="auto"` on the title and each item so Arabic, English, and mixed Arabic/English technical
-  text render correctly. Use logical alignment such as `text-start`, not fixed left alignment.
-- Number only step items, in the order step items were added. Bullets and normal text do not affect
-  step numbering.
-- Make explicit emphasis visually stronger than the normal item-entry animation. Use the existing
-  navy/gold visual language and preserve readable contrast.
-- Animate show/hide and new item appearance with short, lightweight CSS transitions. Respect
-  `prefers-reduced-motion`; do not build a timeline or synchronize individual TTS words.
-- A visible cleared board should remain as an empty board surface. Do not invent placeholder lesson
-  content.
+- Start a lesson. The board opens with the topic title before the tutor's first explanatory
+  sentence, with no visible flicker between clear and title.
+- Let a full topic play. Items appear progressively across the explanation, roughly one per
+  teaching beat, not all at once and not after the tutor has moved on.
+- Interrupt mid-explanation. No new items appear; existing ones remain.
+- Advance to the next topic. The board clears and re-titles in one clean transition.
+- Run one Arabic and one English lesson. Check mixed-script rendering and step numbering in both.
+- Let a topic run long enough to hit six items and confirm the seventh is silently ignored rather
+  than overflowing the column.
+- Disconnect and start a new session. The board is hidden and empty.
 
-## Reducer Tests
+Regression:
 
-Cover at least these cases:
+- The PDF stays navigable with its carousel, zoom, and toolbar intact while the board is visible.
+- Checkpoint questions still appear — they ride on `set_topic`, not a separate event.
+- Nothing references markers any more; `pnpm build` fails on a missed import if the deletion in
+  step 1 was partial.
 
-- Show and hide preserve content.
-- Clear removes content and emphasis but preserves visibility.
-- Setting a second title replaces the first title.
-- Bullet, text, and step events append in arrival order.
-- Content events make a hidden board visible.
-- Emphasis is exclusive and may target the title.
-- Emphasis with an unknown ID is ignored.
-- Duplicate IDs do not create duplicate items.
-- A seventh content item is ignored.
-- Empty, missing, wrongly typed, and over-length fields are ignored.
-- Unknown actions and malformed JSON do not throw.
-- Local session reset returns the exact initial state.
-
-If the repository still has no test runner, add the smallest suitable unit-test setup for the pure
-reducer. Do not introduce browser end-to-end tooling solely for this feature.
-
-## Manual Verification Sequence
-
-Verify the UI with events in this order, without involving the LLM:
-
-```text
-board_show
-board_set_title("TCP")
-board_add_bullet("Reliable delivery")
-board_add_bullet("Ordered packets")
-board_emphasize(first bullet ID)
-board_add_step("Establish the connection")
-board_hide
-board_show
-board_clear
-```
-
-Expected result:
-
-- The board opens without reloading the page.
-- Items appear once and in order.
-- The first bullet is the only emphasized item.
-- The step displays as step 1.
-- Hide/show restores the same content.
-- Clear leaves a visible empty board.
-- The PDF remains navigable and its markers, zoom, and toolbar still work.
-- Arabic and mixed Arabic/English text have the correct direction and alignment.
-- Disconnecting and starting a new session produces a hidden empty board.
-
-Run from the frontend repository:
+Commands:
 
 ```bash
 pnpm lint
@@ -216,23 +204,13 @@ pnpm type-check
 pnpm build
 ```
 
-Also run the reducer tests using the test command added or already available in the repository.
+`test-web-client` has no test runner and this change does not justify adding one. The reducer is
+already pure; if a runner is introduced for other reasons, it is the first thing worth covering.
 
-## V1 Non-Goals
+---
 
-Do not add freehand drawing, student editing, dragging, resizing, coordinates, shapes, diagrams,
-images, export, persistence, board history, speech transcription, word-level synchronization, or
-student controls for mutating board content.
+## Still Out of Scope
 
-## Acceptance Criteria
-
-- All eight board actions work through the existing `ui-control` LiveKit handler.
-- The PDF and agent controls remain fully usable when the board is visible.
-- Arabic, English, RTL, LTR, and mixed technical text render correctly.
-- Title, bullets, normal text, numbered steps, clearing, hiding, and exclusive emphasis render as
-  specified.
-- Events update the React UI immediately without page reloads.
-- Invalid events are ignored without errors or study-session disruption.
-- Board state resets between LiveKit sessions and is not persisted.
-- Desktop and mobile layouts are usable.
-- Reducer tests, lint, type checking, and production build pass.
+Freehand drawing, student editing, dragging, resizing, coordinates, shapes, arrows, diagrams,
+images, equations, export, persistence, board history, speech transcription, word-level
+synchronisation, render acknowledgements, and student controls for mutating board content.

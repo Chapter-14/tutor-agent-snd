@@ -9,10 +9,12 @@ from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, TurnHandlingOptions, room_io
 from livekit.agents.telemetry import set_tracer_provider
-from livekit.agents.voice.events import MetricsCollectedEvent
+from livekit.agents.voice.events import AgentStateChangedEvent, MetricsCollectedEvent
 from livekit.plugins import cartesia, cerebras, deepgram, elevenlabs, noise_cancellation, silero
 
 from tutor_agent_snd.agents.tutor_agent import Assistant
+from tutor_agent_snd.board.director import BoardDirector
+from tutor_agent_snd.board.runtime import DEFAULT_WORDS_PER_SECOND
 from tutor_agent_snd.utils.agent_observation import (
     calculate_cost,
     collect_custom_metrics,
@@ -26,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 MAX_SESSION_DURATION = int(os.getenv("MAX_SESSION_DURATION", "1800"))
+
+# The tutor no longer drives the board, so a turn needs at most one progression call.
+MAX_TOOL_STEPS = 4
+
+# The Board Director runs beside the tutor; keep it independently configurable.
+BOARD_DIRECTOR_MODEL = os.getenv("BOARD_DIRECTOR_MODEL", "gemma-4-31b")
+BOARD_WORDS_PER_SECOND = float(os.getenv("BOARD_WORDS_PER_SECOND", str(DEFAULT_WORDS_PER_SECOND)))
 
 
 def should_record(rate: float = 0.3) -> bool:
@@ -126,7 +135,7 @@ async def entrypoint(ctx: agents.JobContext):
         llm=llm_with_fallback,  # openai.LLM(model="gpt-5-mini", temperature=0.3),
         tts=tts_with_fallback,
         vad=silero.VAD.load(activation_threshold=0.6, min_speech_duration=0.3),
-        max_tool_steps=8,
+        max_tool_steps=MAX_TOOL_STEPS,
         turn_handling=TurnHandlingOptions(
             turn_detection="stt",
             endpointing={
@@ -165,6 +174,32 @@ async def entrypoint(ctx: agents.JobContext):
     prompt_label = "latest" if ENVIRONMENT != "production" else "production"
 
     system_prompt_obj = langfuse.get_prompt("snd-agent-system-prompt", label=prompt_label)
+    board_prompt_obj = langfuse.get_prompt("snd-board-director-prompt", label=prompt_label)
+
+    # Board Director: a parallel, non-speaking LLM that owns the teaching board.
+    board_director = BoardDirector(
+        llm=cerebras.LLM(
+            model=BOARD_DIRECTOR_MODEL,
+            temperature=0.2,
+            parallel_tool_calls=False,
+        ),
+        system_prompt=board_prompt_obj.prompt,
+        language=language,
+        model=BOARD_DIRECTOR_MODEL,
+        prompt_version=board_prompt_obj.version,
+    )
+
+    assistant = Assistant(
+        ctx,
+        course_id=course_id,
+        chapter_id=chapter_id,
+        dynamic_prompt=dynamic_prompt,
+        system_prompt=system_prompt_obj.prompt,
+        lesson_slugs=lesson_slugs,
+        board_director=board_director,
+        board_words_per_second=BOARD_WORDS_PER_SECOND,
+    )
+    ctx.add_shutdown_callback(assistant.board_runtime.aclose)
 
     set_tracer_provider(
         trace_provider,
@@ -192,6 +227,14 @@ async def entrypoint(ctx: agents.JobContext):
             comment="Total cost including base infrastructure and model usage",
             data_type="NUMERIC",
         )
+        board_stats = assistant.board_runtime.stats
+        langfuse.create_score(
+            name="board_ops_published",
+            value=board_stats["ops_published"],
+            session_id=session_id,
+            comment=f"Teaching board activity: {dict(board_stats)}",
+            data_type="NUMERIC",
+        )
         langfuse.create_score(
             name="total_session_time",
             value=total_duration / 60,  # convert to minutes
@@ -208,17 +251,16 @@ async def entrypoint(ctx: agents.JobContext):
     def on_metrics_collected(ev: MetricsCollectedEvent) -> None:
         collect_custom_metrics(ev)
 
+    # Anchor the board's speech clock to the moment audio actually starts playing.
+    @session.on("agent_state_changed")
+    def on_agent_state_changed(ev: AgentStateChangedEvent) -> None:
+        if ev.new_state == "speaking":
+            assistant.board_runtime.on_speech_started()
+
     # Start the session
     await session.start(
         room=ctx.room,
-        agent=Assistant(
-            ctx,
-            course_id=course_id,
-            chapter_id=chapter_id,
-            dynamic_prompt=dynamic_prompt,
-            system_prompt=system_prompt_obj.prompt,
-            lesson_slugs=lesson_slugs,
-        ),
+        agent=assistant,
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=noise_cancellation.BVC(),

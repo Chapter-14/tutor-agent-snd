@@ -1,21 +1,15 @@
 import json
 from collections.abc import Callable
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from livekit.agents import RunContext
 from livekit.agents.llm.utils import function_arguments_to_pydantic_model
 
 from tutor_agent_snd.agents import tutor_agent as tutor_agent_module
-from tutor_agent_snd.agents.tutor_agent import (
-    BOARD_ACTIONS,
-    BOARD_CONTENT_ITEM_LIMIT,
-    BOARD_ITEM_MAX_LENGTH,
-    BOARD_TITLE_MAX_LENGTH,
-    Assistant,
-    BoardAction,
-)
+from tutor_agent_snd.agents.tutor_agent import Assistant
+from tutor_agent_snd.board.models import BoardPlan
 
 
 def _question(sequence: int = 1) -> dict:
@@ -56,6 +50,17 @@ def _plan(
     }
 
 
+class SilentDirector:
+    """A Board Director that never asks for anything, so tests see only agent output."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def plan(self, *, window, snapshot, context) -> BoardPlan:
+        self.calls += 1
+        return BoardPlan()
+
+
 def _make_agent(lesson_slugs: list[str] | None = None) -> tuple[Assistant, AsyncMock]:
     job_ctx = MagicMock()
     publish_data = AsyncMock()
@@ -67,6 +72,7 @@ def _make_agent(lesson_slugs: list[str] | None = None) -> tuple[Assistant, Async
         dynamic_prompt="Dynamic course context.",
         system_prompt="Current workflow instructions.",
         lesson_slugs=lesson_slugs or ["lesson-one"],
+        board_director=SilentDirector(),
     )
     return agent, publish_data
 
@@ -86,20 +92,6 @@ def _assert_reliable_ui_control(publish_data: AsyncMock) -> None:
         assert call.kwargs == {"reliable": True, "topic": "ui-control"}
 
 
-async def _update_board(
-    agent: Assistant,
-    context: RunContext,
-    *,
-    action: BoardAction,
-    text: str | None = None,
-    item_id: str | None = None,
-) -> str:
-    return cast(
-        str,
-        await Assistant.update_teaching_board(agent, context, action, text, item_id),
-    )
-
-
 async def _load_lesson(
     agent: Assistant,
     context: RunContext,
@@ -108,29 +100,21 @@ async def _load_lesson(
     return cast(str, await Assistant.get_lesson_plan(agent, context, lesson))
 
 
-def test_assistant_exposes_lesson_workflow_and_board_tools() -> None:
+def test_assistant_exposes_only_the_lesson_workflow_tools() -> None:
     agent, _ = _make_agent()
 
     assert {getattr(tool, "info").name for tool in agent.tools} == {
         "get_lesson_plan",
         "advance_to_next_topic",
         "check_topic_understanding",
-        "update_teaching_board",
     }
 
 
-def test_board_tool_schema_exposes_only_semantic_arguments() -> None:
+def test_the_board_is_no_longer_a_tutor_tool() -> None:
     agent, _ = _make_agent()
-    board_tool = cast(
-        Callable[..., Any],
-        next(tool for tool in agent.tools if getattr(tool, "info").name == "update_teaching_board"),
-    )
 
-    schema = function_arguments_to_pydantic_model(board_tool).model_json_schema()
-
-    assert set(schema["properties"]) == {"action", "text", "item_id"}
-    assert set(schema["properties"]["action"]["enum"]) == BOARD_ACTIONS
-    assert schema["required"] == ["action"]
+    assert not hasattr(Assistant, "update_teaching_board")
+    assert all(getattr(tool, "info").name != "update_teaching_board" for tool in agent.tools)
 
 
 def test_lesson_tool_schema_exposes_only_lesson_slug() -> None:
@@ -147,158 +131,38 @@ def test_lesson_tool_schema_exposes_only_lesson_slug() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("action", "expected_action"),
-    [("show", "board_show"), ("hide", "board_hide"), ("clear", "board_clear")],
-)
-async def test_board_state_actions_publish_ui_control(action, expected_action) -> None:
-    agent, publish_data = _make_agent()
+async def test_tts_node_forwards_speech_unchanged_while_feeding_the_director() -> None:
+    agent, _ = _make_agent()
+    deltas = ["Let us look at TCP. ", "It delivers packets reliably. "]
 
-    result = await _update_board(agent, _run_context(), action=action)
+    async def source():
+        for delta in deltas:
+            yield delta
 
-    assert result.startswith("[SUCCESS]")
-    assert _published_actions(publish_data) == [{"action": expected_action}]
-    _assert_reliable_ui_control(publish_data)
+    forwarded = [delta async for delta in agent.board_runtime.tee(source(), "speech-1")]
+
+    assert forwarded == deltas
+    assert agent.board_runtime.stats["sentences"] == 2
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("action", "expected_action"),
-    [
-        ("set_title", "board_set_title"),
-        ("add_bullet", "board_add_bullet"),
-        ("add_text", "board_add_text"),
-        ("add_step", "board_add_step"),
-    ],
-)
-async def test_board_content_actions_auto_show_and_return_generated_id(
-    action, expected_action
-) -> None:
+async def test_starting_a_topic_reframes_the_board_without_the_director(monkeypatch) -> None:
     agent, publish_data = _make_agent()
+    director = cast(SilentDirector, agent.board_runtime._director)
 
-    result = await _update_board(agent, _run_context(), action=action, text="  Important idea  ")
+    async def fetch_content(path: str) -> str:
+        return json.dumps(_plan("lesson-one", [_topic(1)]))
+
+    monkeypatch.setattr(tutor_agent_module, "fetch_md_from_bunny", fetch_content)
+    await _load_lesson(agent, _run_context(), "lesson-one")
 
     actions = _published_actions(publish_data)
-    assert actions[0] == {"action": "board_show"}
-    assert actions[1]["action"] == expected_action
-    assert actions[1]["text"] == "Important idea"
-    assert actions[1]["id"].startswith(f"board-{action.replace('_', '-')}-")
-    assert f"item_id={actions[1]['id']}" in result
-    _assert_reliable_ui_control(publish_data)
-
-
-@pytest.mark.asyncio
-async def test_emphasize_accepts_only_existing_generated_id() -> None:
-    agent, publish_data = _make_agent()
-    context = _run_context()
-    await _update_board(agent, context, action="add_bullet", text="Reliable delivery")
-    item_id = _published_actions(publish_data)[1]["id"]
-    publish_data.reset_mock()
-
-    result = await _update_board(agent, context, action="emphasize", item_id=item_id)
-
-    assert result.startswith("[SUCCESS]")
-    assert _published_actions(publish_data) == [{"action": "board_emphasize", "id": item_id}]
-
-    publish_data.reset_mock()
-    result = await _update_board(agent, context, action="emphasize", item_id="missing-item")
-
-    assert result.startswith("[ERROR]")
-    publish_data.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_replacing_title_invalidates_previous_title_id() -> None:
-    agent, publish_data = _make_agent()
-    context = _run_context()
-    await _update_board(agent, context, action="set_title", text="TCP")
-    old_title_id = _published_actions(publish_data)[1]["id"]
-    publish_data.reset_mock()
-
-    await _update_board(agent, context, action="set_title", text="UDP")
-    new_title_id = _published_actions(publish_data)[0]["id"]
-    publish_data.reset_mock()
-
-    old_result = await _update_board(agent, context, action="emphasize", item_id=old_title_id)
-    new_result = await _update_board(agent, context, action="emphasize", item_id=new_title_id)
-
-    assert old_result.startswith("[ERROR]")
-    assert new_result.startswith("[SUCCESS]")
-    assert _published_actions(publish_data) == [{"action": "board_emphasize", "id": new_title_id}]
-
-
-@pytest.mark.asyncio
-async def test_hide_preserves_content_and_next_add_auto_shows_board() -> None:
-    agent, publish_data = _make_agent()
-    context = _run_context()
-    await _update_board(agent, context, action="add_bullet", text="First")
-    first_id = _published_actions(publish_data)[1]["id"]
-    await _update_board(agent, context, action="hide")
-    publish_data.reset_mock()
-
-    emphasize_result = await _update_board(agent, context, action="emphasize", item_id=first_id)
-    await _update_board(agent, context, action="add_bullet", text="Second")
-
-    assert emphasize_result.startswith("[SUCCESS]")
-    assert [action["action"] for action in _published_actions(publish_data)] == [
-        "board_emphasize",
-        "board_show",
-        "board_add_bullet",
+    board_actions = [
+        action["action"] for action in actions if action["action"].startswith("board_")
     ]
-
-
-@pytest.mark.asyncio
-async def test_clear_resets_items_but_preserves_visibility() -> None:
-    agent, publish_data = _make_agent()
-    context = _run_context()
-    for index in range(BOARD_CONTENT_ITEM_LIMIT):
-        result = await _update_board(agent, context, action="add_bullet", text=f"Point {index}")
-        assert result.startswith("[SUCCESS]")
-
-    calls_before_rejection = publish_data.await_count
-    result = await _update_board(agent, context, action="add_bullet", text="Too many")
-    assert result.startswith("[ERROR]")
-    assert publish_data.await_count == calls_before_rejection
-
-    await _update_board(agent, context, action="clear")
-    publish_data.reset_mock()
-    result = await _update_board(agent, context, action="add_bullet", text="Fresh point")
-
-    assert result.startswith("[SUCCESS]")
-    assert [action["action"] for action in _published_actions(publish_data)] == ["board_add_bullet"]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("action", "text"),
-    [
-        ("set_title", "T" * (BOARD_TITLE_MAX_LENGTH + 1)),
-        ("add_text", "T" * (BOARD_ITEM_MAX_LENGTH + 1)),
-        ("add_step", "   "),
-    ],
-)
-async def test_board_rejects_invalid_text(action, text) -> None:
-    agent, publish_data = _make_agent()
-
-    result = await _update_board(agent, _run_context(), action=action, text=text)
-
-    assert result.startswith("[ERROR]")
-    publish_data.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_board_skips_update_after_interruption() -> None:
-    agent, publish_data = _make_agent()
-
-    result = await _update_board(
-        agent,
-        _run_context(interrupted=True),
-        action="add_bullet",
-        text="Late point",
-    )
-
-    assert result.startswith("[INTERRUPTED]")
-    publish_data.assert_not_awaited()
+    assert board_actions == ["board_clear", "board_show", "board_set_title"]
+    assert actions[3]["text"] == "Topic 1"
+    assert director.calls == 0
 
 
 @pytest.mark.asyncio
@@ -319,9 +183,14 @@ async def test_get_lesson_plan_returns_exact_questionless_content(monkeypatch) -
     assert result == topic["content"]
     assert agent.current_plan is not None
     assert agent.current_plan.current_topic_index == 0
-    assert _published_actions(publish_data) == [
-        {"action": "board_clear"},
-        {"action": "set_lesson", "lesson": "lesson-one", "number_of_topics": 1},
+    published = _published_actions(publish_data)
+    assert published[0] == {"action": "set_lesson", "lesson": "lesson-one", "number_of_topics": 1}
+    assert [action["action"] for action in published[1:4]] == [
+        "board_clear",
+        "board_show",
+        "board_set_title",
+    ]
+    assert published[4:] == [
         {
             "action": "set_topic",
             "topic": "Topic 1",
@@ -349,28 +218,7 @@ async def test_get_lesson_plan_appends_question_packet(monkeypatch) -> None:
 
     assert result.startswith(topic["content"] + "\n\n---INTERNAL_ASSESSMENT---")
     assert "Expected answer: Idea 1 is the expected concept." in result
-    assert _published_actions(publish_data)[2]["question"] == "What is idea 1?"
-
-
-@pytest.mark.asyncio
-async def test_loading_lesson_clears_old_board_state(monkeypatch) -> None:
-    agent, publish_data = _make_agent()
-    context = _run_context()
-    await _update_board(agent, context, action="add_bullet", text="Old lesson")
-    old_item_id = _published_actions(publish_data)[1]["id"]
-    publish_data.reset_mock()
-
-    async def fetch_content(path: str) -> str:
-        return json.dumps(_plan("lesson-one", [_topic(1)]))
-
-    monkeypatch.setattr(tutor_agent_module, "fetch_md_from_bunny", fetch_content)
-    await _load_lesson(agent, context, "lesson-one")
-
-    assert _published_actions(publish_data)[0] == {"action": "board_clear"}
-    publish_data.reset_mock()
-    result = await _update_board(agent, context, action="emphasize", item_id=old_item_id)
-    assert result.startswith("[ERROR]")
-    publish_data.assert_not_awaited()
+    assert _published_actions(publish_data)[4]["question"] == "What is idea 1?"
 
 
 @pytest.mark.asyncio
@@ -448,6 +296,8 @@ async def test_questionless_advancement_activates_next_topic(monkeypatch) -> Non
     assert agent.current_plan.current_topic_index == 1
     assert _published_actions(publish_data) == [
         {"action": "topic_done", "topic": "Topic 1"},
+        {"action": "board_clear"},
+        {"action": "board_set_title", "id": ANY, "text": "Topic 2"},
         {
             "action": "set_topic",
             "topic": "Topic 2",
@@ -534,3 +384,38 @@ async def test_correct_assessment_completes_topic(monkeypatch) -> None:
     assert agent.current_plan.current_topic.question is not None
     assert agent.current_plan.current_topic.question.student_responded is True
     assert agent.current_plan.current_topic.question.completed is True
+
+
+@pytest.mark.asyncio
+async def test_tts_node_delegates_to_the_default_pipeline_with_the_teed_stream(monkeypatch) -> None:
+    agent, _ = _make_agent()
+    seen: dict[str, Any] = {}
+
+    def fake_default_tts_node(_agent, text, model_settings):
+        seen["agent"] = _agent
+        seen["text"] = text
+        seen["model_settings"] = model_settings
+        return text
+
+    monkeypatch.setattr(
+        tutor_agent_module.Agent.default, "tts_node", staticmethod(fake_default_tts_node)
+    )
+
+    async def source():
+        yield "One two three four. "
+
+    settings = object()
+    result = agent.tts_node(source(), cast(Any, settings))
+
+    assert seen["agent"] is agent
+    assert seen["model_settings"] is settings
+    assert [delta async for delta in result] == ["One two three four. "]
+    # The stream reaching TTS is the tee, so the Director saw the sentence.
+    assert agent.board_runtime.stats["sentences"] == 1
+
+
+def test_speech_helpers_are_safe_outside_an_active_session() -> None:
+    agent, _ = _make_agent()
+
+    assert agent._speech_id() is None
+    assert agent._speech_interrupted() is False
