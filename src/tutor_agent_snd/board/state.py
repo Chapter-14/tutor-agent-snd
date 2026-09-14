@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 BOARD_TITLE_MAX_LENGTH = 80
 BOARD_ITEM_MAX_LENGTH = 180
-BOARD_CONTENT_ITEM_LIMIT = 6
+BOARD_CONTENT_ITEM_LIMIT = 15
 
 
 def _generate_id(action: str) -> str:
