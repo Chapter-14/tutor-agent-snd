@@ -54,8 +54,12 @@ class Assistant(Agent):
 
     async def on_enter(self) -> None:
         await self.board_runtime.start()
+        # Some models (e.g. Cerebras' Qwen) require the chat template's system
+        # message(s) to stay at the very beginning, so the greeting instruction is
+        # sent as the user turn instead of via `instructions` (which would be
+        # appended as a trailing system message, after this user message).
         await self.session.generate_reply(
-            instructions="""Greet the user by name. Then ask them to choose a lesson from the list that will appear on screen after you finish speaking, without listing examples aloud."""
+            user_input="""Greet the user by name. Then ask them to choose a lesson from the list that will appear on screen after you finish speaking, without listing examples aloud."""
         )
 
     # Teaching board plumbing

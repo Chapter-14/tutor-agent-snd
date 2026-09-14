@@ -19,6 +19,7 @@ PRICING = {
         "zai-glm-4.7": {"input": 0.00000225, "output": 0.00000275},
         "gpt-oss-120b": {"input": 0.000000175, "output": 0.000000350},
         "gemma-4-31b": {"input": 0.00000099, "output": 0.00000145},
+        "qwen-3.8-27b": {"input": 0.00000099, "output": 0.00000149},
     },
     "groq": {"llama-3.3-70b-versatile": {"input": 0.00000059, "output": 0.00000079}},
 }

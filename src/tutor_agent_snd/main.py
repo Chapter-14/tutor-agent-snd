@@ -33,7 +33,7 @@ MAX_SESSION_DURATION = int(os.getenv("MAX_SESSION_DURATION", "1800"))
 MAX_TOOL_STEPS = 4
 
 # The Board Director runs beside the tutor; keep it independently configurable.
-BOARD_DIRECTOR_MODEL = os.getenv("BOARD_DIRECTOR_MODEL", "gemma-4-31b")
+BOARD_DIRECTOR_MODEL = os.getenv("BOARD_DIRECTOR_MODEL", "qwen-3.8-27b")
 BOARD_WORDS_PER_SECOND = float(os.getenv("BOARD_WORDS_PER_SECOND", str(DEFAULT_WORDS_PER_SECOND)))
 
 
@@ -99,7 +99,8 @@ async def entrypoint(ctx: agents.JobContext):
     }
 
     # LLM setup with fallback mechanism
-    p_llm = cerebras.LLM(model="gemma-4-31b", temperature=0.3, parallel_tool_calls=False)
+    p_llm = cerebras.LLM(model="qwen-3.8-27b", temperature=0.3, parallel_tool_calls=False)
+    # p_llm = cerebras.LLM(model="gemma-4-31b", temperature=0.3, parallel_tool_calls=False)
     f_llm = cerebras.LLM(model="zai-glm-4.7", temperature=0.3, parallel_tool_calls=False)
 
     llm_with_fallback = agents.llm.FallbackAdapter(
