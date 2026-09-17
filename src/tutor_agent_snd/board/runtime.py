@@ -35,7 +35,7 @@ from tutor_agent_snd.board.state import BoardState
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_WORDS_PER_SECOND = 2.4
+DEFAULT_WORDS_PER_SECOND = 2.0
 MAX_BUFFERED_SENTENCE_CHARS = 240
 MAX_WINDOW_SENTENCES = 2
 MAX_RELEASE_SLEEP = 0.25
