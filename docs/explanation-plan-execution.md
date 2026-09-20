@@ -1,5 +1,12 @@
 # Lesson Plan Execution
 
+> **Partly superseded (v1).** The progression state machine still holds, but this document predates
+> typed segments, the beat cursor, remediation rungs, and `check_topic_understanding`'s
+> `chosen_option_id`. It also documents `update_teaching_board`, which no longer exists. See
+> [Lesson Plan Structure](board-feature/lesson-plan-structure.md),
+> [System Context](board-feature/system-context.md) and
+> [Frontend Board Spec v2](board-feature/frontend-board-spec-v2.md).
+
 This document describes the implemented lesson/topic state machine, its model-callable tools, and
 the frontend data contract.
 

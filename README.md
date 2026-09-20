@@ -104,13 +104,22 @@ tutor-agent-snd/
 |   `-- handoff/
 |       `-- CONTENT_PIPELINE_INTEGRATION_SPEC.md
 |-- docs/
-|   |-- architecture.md
 |   |-- agent-analysis.md
 |   |-- current-board-director-architecture.md
 |   |-- data-models.md
-|   `-- explanation-plan-execution.md
+|   |-- explanation-plan-execution.md
+|   |-- archive/
+|   `-- board-feature/
+|       |-- lesson-plan-structure.md
+|       |-- frontend-board-spec-v2.md
+|       |-- system-context.md
+|       |-- Board_Elements_Catalog_v1_EN.md
+|       `-- Board_Requirements_Inventory_v1_EN.md
 |-- prompts/
-|   `-- snd-agent-system-prompt-v2.md
+|   |-- snd-agent-system-prompt-v3.md
+|   `-- snd-board-director-prompt-v2.md
+|-- scripts/
+|   `-- replay_board.py
 `-- src/
     `-- tutor_agent_snd/
         |-- __init__.py
@@ -120,6 +129,7 @@ tutor-agent-snd/
         |-- agents/
         |   `-- tutor_agent.py
         |-- board/
+        |   |-- cursor.py
         |   |-- director.py
         |   |-- models.py
         |   |-- runtime.py
@@ -135,13 +145,15 @@ tutor-agent-snd/
 
 - `src/tutor_agent_snd/main.py`: LiveKit worker entrypoint and pipeline setup.
 - `src/tutor_agent_snd/agents/tutor_agent.py`: Conversational lesson/topic tools and board integration.
-- `src/tutor_agent_snd/board/`: Board planning, state, pacing, validation, and publication.
-- `src/tutor_agent_snd/domain_types.py`: `LessonPlan`, `Topic`, question, and action state.
+- `src/tutor_agent_snd/board/`: Beat cursor, board state, pacing, validation, and publication.
+- `src/tutor_agent_snd/domain_types.py`: `LessonPlan`, `Topic`, `Segment`, `Beat`, `Assessment`.
 - `src/tutor_agent_snd/utils/plan_helpers.py`: Exact lesson JSON validation and topic formatting.
+- `scripts/replay_board.py`: Replay a transcript against a topic and print the board timeline.
 - `src/tutor_agent_snd/utils/parse_dynamic_prompt.py`: Chapter lesson catalog loading.
 - `src/tutor_agent_snd/utils/bunny.py`: Bunny Storage fetch helper.
 - `src/tutor_agent_snd/utils/agent_observation.py`: Langfuse tracing and cost observation.
-- `prompts/snd-agent-system-prompt-v2.md`: Review artifact for manual prompt deployment.
+- `prompts/snd-agent-system-prompt-v3.md`, `prompts/snd-board-director-prompt-v2.md`: Review
+  artifacts for manual prompt deployment.
 
 ## Lesson Content
 
@@ -154,22 +166,25 @@ courses/{course_id}/{chapter_id}/{lesson_slug}.json
 ```
 
 `lessons_list.json` contains English lesson names, briefs, and slugs. Each slug has one exact lesson
-JSON file containing ordered topics. A topic has one English free-form `content` string, an optional
-`scroll` action, and an optional question. Questionless topics advance only after the student is
-ready; assessed topics advance through answer evaluation.
+JSON file containing ordered topics. A topic is a typed teaching unit: a knowledge type, terms,
+ordered segments, a mandatory "what loses you marks" line, an optional assessment, and a remediation
+ladder. Each segment carries prose for the tutor and an optional blueprint of board **beats**.
 
 The Tutor runtime tools are `get_lesson_plan`, `advance_to_next_topic`, and
-`check_topic_understanding`. A separate non-speaking Board Director proposes visual operations while
-deterministic board code validates, paces, and publishes them. Frontend progress uses `set_lesson`,
-`set_topic`, `topic_done`, `scroll`, and `board_*` events.
+`check_topic_understanding`. A separate non-speaking Board Director decides which authored beat the
+tutor has reached; deterministic board code resolves, validates, paces, and publishes it. Frontend
+progress uses `set_lesson`, `set_topic`, `topic_done`, `scroll`, and `board_*` events.
 
-See [Current Board Director Architecture](docs/current-board-director-architecture.md),
-[Data Models](docs/data-models.md),
-[Lesson Plan Execution](docs/explanation-plan-execution.md), and
+See [Lesson Plan Structure](docs/board-feature/lesson-plan-structure.md),
+[System Context](docs/board-feature/system-context.md),
+[Frontend Board Spec v2](docs/board-feature/frontend-board-spec-v2.md), and
 [Content Pipeline Integration](contexts/handoff/CONTENT_PIPELINE_INTEGRATION_SPEC.md).
 
-The repository prompt file is not deployed automatically. An operator must manually create and
-promote the corresponding `snd-agent-system-prompt` version in Langfuse.
+The runtime accepts the v2 plan contract only; a v1 lesson file is rejected with a migration message.
+
+The repository prompt files are not deployed automatically. An operator must manually create and
+promote the corresponding `snd-agent-system-prompt` and `snd-board-director-prompt` versions in
+Langfuse.
 
 ## Voice Pipeline Configuration
 

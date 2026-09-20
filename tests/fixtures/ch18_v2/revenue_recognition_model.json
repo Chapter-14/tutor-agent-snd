@@ -1,0 +1,407 @@
+{
+  "lesson_slug": "revenue_recognition_model",
+  "title": "The Revenue Recognition Model",
+  "lesson_sequence_number": 1,
+  "total_topics": 3,
+  "topics": [
+    {
+      "id": "model-objective",
+      "title": "Objective of Revenue Recognition",
+      "sequence": 1,
+      "requires_completion_of": null,
+      "action": { "type": "scroll", "page": 6 },
+      "knowledge_type": "concept_successive",
+      "terms": [
+        { "en": "revenue recognition", "ar": "الاعتراف بالإيراد" },
+        { "en": "performance obligation", "ar": "التزام الأداء" },
+        { "en": "control", "ar": "السيطرة" }
+      ],
+      "segments": [
+        {
+          "id": "objective-definition",
+          "role": "understanding",
+          "content": "Open with the purpose, not the five steps. Revenue depicts the transfer of promised goods or services to a customer, in the amount the entity expects to be entitled to. Deliver the definition in three pieces, pausing on each: what revenue depicts, what transfers, and how much is recognised. The key words the exam rewards are 'transfer' and 'expects to be entitled to'.",
+          "must_say": [
+            "Revenue depicts the transfer of promised goods or services to customers in an amount that reflects the consideration the entity expects to be entitled to."
+          ],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-definition",
+                "kind": "definition",
+                "anchor": "revenue depicts the transfer of promised goods or services",
+                "payload": {
+                  "chunks": [
+                    "Revenue depicts the transfer",
+                    "of promised goods or services to customers",
+                    "in the amount the entity expects to be entitled to"
+                  ],
+                  "key_words": ["transfer", "expects to be entitled to"]
+                }
+              },
+              {
+                "id": "b-term-obligation",
+                "kind": "term",
+                "anchor": "performance obligation",
+                "payload": { "en": "performance obligation", "ar": "التزام الأداء" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "objective-contrast",
+          "role": "comparison",
+          "content": "Contrast signing with satisfying. Airbus agreeing to sell aircraft to Cathay Pacific creates a contract but recognises nothing. Revenue arrives when control of the aircraft transfers. Make the single distinguishing feature explicit: an enforceable promise versus a transferred asset.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": { "kind": "columns", "heading": "Signing vs satisfying" },
+            "beats": [
+              {
+                "id": "b-compare-signing",
+                "kind": "compare",
+                "anchor": "signing the contract is not the same as satisfying it",
+                "payload": {
+                  "aspect_label": "Aspect",
+                  "columns": ["Signing the contract", "Satisfying the obligation"],
+                  "rows": [
+                    {
+                      "aspect": "What exists",
+                      "x": "An enforceable promise",
+                      "y": "A transferred good or service"
+                    },
+                    {
+                      "aspect": "Who holds control",
+                      "x": "The seller",
+                      "y": "The customer"
+                    },
+                    {
+                      "aspect": "Revenue recognised",
+                      "x": "None",
+                      "y": "Yes, at the allocated amount"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "objective-warning",
+          "role": "warning",
+          "content": "Close with the exam-strategy line before asking the question. Say it once, plainly, as advice about the marker rather than as another fact.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-loses-marks",
+                "kind": "callout",
+                "anchor": "what loses you marks here",
+                "payload": {
+                  "kind": "loses_marks",
+                  "text": "Writing 'when the contract is signed'. The marker wants transfer of control."
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "assessment": {
+        "id": "model-objective-check",
+        "form": "mcq",
+        "question": "Why is signing a customer contract not enough by itself to recognise revenue?",
+        "expected_answer": "Revenue is recognised when the performance obligation is satisfied and control of the promised good or service transfers to the customer.",
+        "options": [
+          {
+            "id": "opt-signed",
+            "text": "Because the contract has not been approved in writing yet",
+            "correct": false,
+            "misconception": "form_over_substance"
+          },
+          {
+            "id": "opt-control",
+            "text": "Because control of the promised good or service has not transferred yet",
+            "correct": true,
+            "misconception": null
+          },
+          {
+            "id": "opt-cash",
+            "text": "Because the customer has not paid cash yet",
+            "correct": false,
+            "misconception": "cash_basis"
+          }
+        ],
+        "reexplain_guide": "Contrast agreeing to deliver an airplane with actually transferring control of it.",
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-options",
+              "kind": "options",
+              "anchor": "why is signing not enough",
+              "payload": {
+                "stem": "Why is signing a contract not enough to recognise revenue?",
+                "options": [
+                  { "id": "opt-signed", "text": "The contract is not in writing", "correct": false },
+                  { "id": "opt-control", "text": "Control has not transferred", "correct": true },
+                  { "id": "opt-cash", "text": "The customer has not paid", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "loses_marks": "Answering 'when the contract is signed'. The marker is looking for transfer of control.",
+      "remediation": [
+        {
+          "id": "rung-cash-basis",
+          "rung": 1,
+          "trigger": "cash_basis",
+          "content": "The student is on the cash basis. Re-anchor on the definition already on the board and point out that it never mentions payment.",
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-cash",
+                "kind": "text",
+                "anchor": "revenue is not about when the cash arrives",
+                "payload": { "text": "Cash timing does not decide revenue" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "rung-form-over-substance",
+          "rung": 2,
+          "trigger": "form_over_substance",
+          "content": "The student is looking at the paperwork. Use one distant-domain analogy: a signed rental agreement is not the same as handing over the keys.",
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-keys",
+                "kind": "text",
+                "anchor": "signing the rental agreement versus handing over the keys",
+                "payload": { "text": "Signed agreement is not handed-over keys" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "rung-default-anchor",
+          "rung": 1,
+          "trigger": "default",
+          "content": "Re-anchor on the two key words already on the board: transfer, and expects to be entitled to.",
+          "board": null
+        }
+      ]
+    },
+    {
+      "id": "five-step-chain",
+      "title": "The Connected Five-Step Process",
+      "sequence": 2,
+      "requires_completion_of": "model-objective",
+      "action": null,
+      "knowledge_type": "mechanism",
+      "terms": [{ "en": "transaction price", "ar": "سعر المعاملة" }],
+      "segments": [
+        {
+          "id": "chain-overview",
+          "role": "understanding",
+          "content": "Teach the five steps as one chain, not a list. The first four decide what is being accounted for and how much belongs to each promise; the fifth decides when revenue is recorded. Name each link as you reach it.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "clear_live",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-chain",
+                "kind": "chain",
+                "anchor": "the five steps are one connected chain",
+                "payload": {
+                  "links": [
+                    "Identify the contract",
+                    "Identify performance obligations",
+                    "Determine the transaction price",
+                    "Allocate the price",
+                    "Recognise revenue"
+                  ],
+                  "break_at": null
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "chain-break",
+          "role": "understanding",
+          "content": "Break the chain deliberately. If the promises are not separated at step two, the allocation at step four is wrong and the revenue at step five is wrong with it. This is the link the exam tests.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-chain-consequence",
+                "kind": "callout",
+                "anchor": "if the promises are not separated the allocation is wrong",
+                "payload": {
+                  "kind": "mistake",
+                  "text": "Miss a separate obligation and every later step inherits the error"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "assessment": null,
+      "loses_marks": "Listing the five steps without saying what each one decides. The marker pays for the decision, not the label.",
+      "remediation": [
+        {
+          "id": "rung-chain-default",
+          "rung": 1,
+          "trigger": "default",
+          "content": "Re-anchor on the chain already on the board and walk two links only.",
+          "board": null
+        }
+      ]
+    },
+    {
+      "id": "allocate-price",
+      "title": "Allocating the Transaction Price",
+      "sequence": 3,
+      "requires_completion_of": "five-step-chain",
+      "action": { "type": "scroll", "page": 29 },
+      "knowledge_type": "procedure",
+      "terms": [{ "en": "standalone selling price", "ar": "سعر البيع المستقل" }],
+      "segments": [
+        {
+          "id": "allocate-worked",
+          "role": "worked_example",
+          "content": "Work one example end to end and leave it on the board as the model. A bundle sells for 120,000 SAR with standalone selling prices of 100,000 and 50,000. Show the ratio, then each allocated amount, then the entry. Say every step out loud in order.",
+          "must_say": [],
+          "board": {
+            "region": "pinned",
+            "on_enter": "clear_live",
+            "group": { "kind": "box", "heading": "Worked example" },
+            "beats": [
+              {
+                "id": "b-worked-ratio",
+                "kind": "equation",
+                "anchor": "the allocation ratio is each standalone price over the total",
+                "payload": {
+                  "latex": "\\frac{100{,}000}{150{,}000} = \\frac{2}{3}",
+                  "display": true
+                }
+              },
+              {
+                "id": "b-worked-step-1",
+                "kind": "step",
+                "anchor": "add the standalone selling prices together",
+                "payload": { "text": "Total standalone prices: 150,000 SAR" }
+              },
+              {
+                "id": "b-worked-step-2",
+                "kind": "step",
+                "anchor": "apply each ratio to the transaction price",
+                "payload": { "text": "Hardware: 120,000 × 2/3 = 80,000 SAR" }
+              },
+              {
+                "id": "b-worked-entry",
+                "kind": "table",
+                "anchor": "the journal entry records the allocation",
+                "payload": {
+                  "variant": "journal",
+                  "header": ["Account", "Debit", "Credit"],
+                  "rows": [
+                    ["Cash", "120,000", ""],
+                    ["Revenue - hardware", "", "80,000"],
+                    ["Revenue - service", "", "40,000"]
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "allocate-faded",
+          "role": "faded_example",
+          "content": "Now run the same procedure with the marks-losing step hidden. Give a second bundle and stop at the ratio, asking the student to supply it. The worked example stays visible beside it as the model.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "clear_live",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-faded-blanks",
+                "kind": "blanks",
+                "anchor": "now you supply the ratio and the allocated amount",
+                "payload": {
+                  "template": "Ratio = ___ , so the allocated amount is ___ SAR",
+                  "blanks": [
+                    { "id": "ratio", "fill": "60,000 / 150,000" },
+                    { "id": "amount", "fill": "48,000" }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "assessment": {
+        "id": "allocate-price-check",
+        "form": "problem",
+        "question": "A bundle sells for 90,000 SAR. The standalone prices are 40,000 and 20,000. How much is allocated to the first component?",
+        "expected_answer": "60,000 SAR, because 40,000 over 60,000 is two thirds of the 90,000 transaction price.",
+        "options": [],
+        "reexplain_guide": "Return to the pinned worked example and repeat only the ratio step.",
+        "board": null
+      },
+      "loses_marks": "Splitting the price evenly instead of by standalone selling price. It costs the whole allocation mark.",
+      "remediation": [
+        {
+          "id": "rung-allocate-anchor",
+          "rung": 1,
+          "trigger": "default",
+          "content": "Re-anchor on the pinned worked example and repeat the ratio step only.",
+          "board": null
+        },
+        {
+          "id": "rung-allocate-worked",
+          "rung": 4,
+          "trigger": "even_split",
+          "content": "Work a fresh two-component example beside the pinned one, stating the ratio aloud at each step.",
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-even-split",
+                "kind": "text",
+                "anchor": "an even split ignores what each component is worth",
+                "payload": { "text": "Even split ignores standalone prices" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

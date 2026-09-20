@@ -1,11 +1,13 @@
-"""Board Director: the parallel LLM that decides what the board should show.
+"""Board Director: the parallel LLM that decides when the board moves.
 
 The Director never speaks to the student and never controls the conversation. It
-receives the sentences the tutor is about to say plus the current board, and returns a
-small batch of semantic operations.
+receives the sentences the tutor is about to say, the beats the plan authored for
+this topic, and the current board, and it returns a small batch of *references* —
+which authored beat the tutor has reached, which item to update, which chunk to
+reveal. It does not write the board's content; the plan already did.
 
-Every failure path returns an empty plan. The Director must never be able to break or
-delay the voice pipeline.
+Every failure path returns an empty plan. The Director must never be able to break
+or delay the voice pipeline.
 """
 
 import asyncio
@@ -17,17 +19,12 @@ from livekit.agents import APIConnectOptions
 from livekit.agents.llm import ChatContext
 from livekit.agents.telemetry import tracer as lk_tracer
 
-from tutor_agent_snd.board.models import BoardPlan, BoardSnapshot, TopicContext
-from tutor_agent_snd.board.state import (
-    BOARD_CONTENT_ITEM_LIMIT,
-    BOARD_ITEM_MAX_LENGTH,
-    BOARD_TITLE_MAX_LENGTH,
-)
+from tutor_agent_snd.board.models import BoardSnapshot, DirectorPlan, TopicContext
+from tutor_agent_snd.board.state import REGION_LIMITS
 
 logger = logging.getLogger(__name__)
 
-DIRECTOR_TIMEOUT = 2.0
-TOPIC_CONTENT_CHAR_LIMIT = 1200
+DIRECTOR_TIMEOUT = 2.5
 
 
 class StructuredLLM(Protocol):
@@ -48,7 +45,7 @@ class StructuredLLM(Protocol):
 
 
 class BoardDirector:
-    """Turns a window of tutor speech into a :class:`BoardPlan`."""
+    """Binds a window of tutor speech to the topic's authored beats."""
 
     def __init__(
         self,
@@ -74,11 +71,13 @@ class BoardDirector:
         window: list[str],
         snapshot: BoardSnapshot,
         context: TopicContext,
-    ) -> BoardPlan:
+    ) -> DirectorPlan:
         started_at = time.monotonic()
         with lk_tracer.start_as_current_span("board_director") as span:
             span.set_attribute("board.director.model", self._model)
             span.set_attribute("board.director.topic_title", context.topic_title)
+            span.set_attribute("board.director.segment_role", context.segment_role)
+            span.set_attribute("board.director.pending_beats", len(context.pending))
             if self._prompt_version is not None:
                 span.set_attribute("board.director.prompt_version", str(self._prompt_version))
 
@@ -90,11 +89,11 @@ class BoardDirector:
                 raise
             except TimeoutError:
                 logger.warning("Board director timed out", extra={"timeout": self._timeout})
-                plan = BoardPlan()
+                plan = DirectorPlan()
                 span.set_attribute("board.director.outcome", "timeout")
             except Exception:
                 logger.exception("Board director call failed")
-                plan = BoardPlan()
+                plan = DirectorPlan()
                 span.set_attribute("board.director.outcome", "error")
             else:
                 span.set_attribute("board.director.outcome", "ok")
@@ -110,7 +109,7 @@ class BoardDirector:
         window: list[str],
         snapshot: BoardSnapshot,
         context: TopicContext,
-    ) -> BoardPlan:
+    ) -> DirectorPlan:
         chat_ctx = ChatContext.empty()
         chat_ctx.add_message(role="system", content=self._system_prompt)
         chat_ctx.add_message(role="user", content=self._build_request(window, snapshot, context))
@@ -118,7 +117,7 @@ class BoardDirector:
         raw = ""
         async with self._llm.chat(
             chat_ctx=chat_ctx,
-            response_format=BoardPlan,
+            response_format=DirectorPlan,
             conn_options=self._conn_options,
         ) as stream:
             async for chunk in stream:
@@ -127,8 +126,8 @@ class BoardDirector:
 
         raw = raw.strip()
         if not raw:
-            return BoardPlan()
-        return BoardPlan.model_validate_json(raw)
+            return DirectorPlan()
+        return DirectorPlan.model_validate_json(raw)
 
     def _build_request(
         self,
@@ -136,20 +135,29 @@ class BoardDirector:
         snapshot: BoardSnapshot,
         context: TopicContext,
     ) -> str:
-        remaining = max(0, BOARD_CONTENT_ITEM_LIMIT - len(snapshot.items))
+        slots = ", ".join(
+            f"{region} {len(snapshot.region_items(region))}/{limit}"
+            for region, limit in REGION_LIMITS.items()
+        )
         spoken = "\n".join(window)
+        awaiting = (
+            "The student has been asked the topic question and has not answered yet."
+            if context.awaiting_answer
+            else "No question is pending."
+        )
         return (
             f"SESSION LANGUAGE: {self._language}\n"
-            f"TITLE LIMIT: {BOARD_TITLE_MAX_LENGTH} characters\n"
-            f"ITEM LIMIT: {BOARD_ITEM_MAX_LENGTH} characters\n"
-            f"CONTENT SLOTS REMAINING: {remaining}\n\n"
-            f"CURRENT TOPIC: {context.topic_title}\n\n"
-            "AUTHORED TOPIC CONTENT:\n"
-            f"{context.topic_content[:TOPIC_CONTENT_CHAR_LIMIT]}\n\n"
-            "CURRENT BOARD:\n"
+            f"CURRENT TOPIC: {context.topic_title}\n"
+            f"KNOWLEDGE TYPE: {context.knowledge_type}\n"
+            f"CURRENT STAGE: {context.segment_role}\n"
+            f"REGION CAPACITY: {slots}\n"
+            f"{awaiting}\n\n"
+            "PENDING BEATS (beat_id | stage | kind | anchor | preview):\n"
+            f"{context.pending_lines()}\n\n"
+            "CURRENT BOARD (id | region | kind | state | text):\n"
             f"{snapshot.as_prompt_lines()}\n\n"
             "THE TUTOR IS ABOUT TO SAY:\n"
             f"{spoken}\n\n"
-            "Return the operations the board needs for what the tutor is about to say. "
-            "Return an empty list if the board already shows this idea."
+            "Has the tutor reached the anchor of a pending beat? Fire it if so. "
+            "Otherwise return an empty list."
         )

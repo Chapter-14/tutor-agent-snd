@@ -2,6 +2,17 @@
 
 ## Document Status
 
+> **Superseded for the board vocabulary and plan contract.** This describes the purely reactive
+> v1 Director, whose six-operation vocabulary, flat six-item cap, and opaque topic `content` no
+> longer exist. The current architecture is in
+> [System Context](board-feature/system-context.md). What remains accurate and worth reading here
+> is the analysis of *why* board tools were taken away from the conversational tutor, and the
+> concurrency and failure-handling discussion.
+>
+> §"Recommended Next Engineering Priorities" items 1, 2 and 7 are now done: generation and epoch are
+> re-checked after the Director await, every mutation goes through one serialized path, and the
+> product moved to authored teaching beats.
+
 This document describes the board architecture implemented by commit `66bdd41`
 (`Add new board agent archetecture`) on August 31, 2026. It documents the code as it
 exists after that update, rather than an aspirational future design.

@@ -7,14 +7,14 @@ from livekit.agents import Agent, ModelSettings, RunContext
 from livekit.agents.llm import function_tool
 from livekit.agents.voice.speech_handle import SpeechHandle
 
-from tutor_agent_snd.board.models import BoardOp, TopicContext
 from tutor_agent_snd.board.runtime import DEFAULT_WORDS_PER_SECOND, BoardRuntime, SupportsPlan
-from tutor_agent_snd.board.state import BOARD_TITLE_MAX_LENGTH
-from tutor_agent_snd.domain_types import LessonPlan, Topic
+from tutor_agent_snd.domain_types import Assessment, LessonPlan, Topic
 from tutor_agent_snd.utils.bunny import fetch_md_from_bunny
-from tutor_agent_snd.utils.plan_helpers import format_topic_content, parse_plan
+from tutor_agent_snd.utils.plan_helpers import PlanValidationError, format_topic_brief, parse_plan
 
 logger = logging.getLogger(__name__)
+
+MAX_ASSESSMENT_ATTEMPTS = 2
 
 
 ## Main Agent Definition
@@ -41,7 +41,6 @@ class Assistant(Agent):
         self.board_runtime = BoardRuntime(
             publish=self._publish_ui_control,
             director=board_director,
-            context_provider=self._topic_context,
             is_interrupted=self._speech_interrupted,
             words_per_second=board_words_per_second,
         )
@@ -86,26 +85,12 @@ class Assistant(Agent):
         except RuntimeError:  # no active activity, e.g. during teardown
             return None
 
-    def _topic_context(self) -> TopicContext:
-        topic = self.current_plan.current_topic if self.current_plan else None
-        if topic is None:
-            return TopicContext()
-        return TopicContext(topic_title=topic.title, topic_content=topic.content)
-
     # Frontend communication helpers
 
     async def _publish_ui_control(self, payload: dict) -> None:
         await self.job_ctx.room.local_participant.publish_data(
             json.dumps(payload), reliable=True, topic="ui-control"
         )
-
-    async def _reframe_board(self, title: str | None) -> None:
-        """Reset the board at a concept boundary. Deterministic: no LLM involved."""
-
-        ops = [BoardOp(action="clear")]
-        if title:
-            ops.append(BoardOp(action="set_title", text=title[:BOARD_TITLE_MAX_LENGTH]))
-        await self.board_runtime.publish_now(ops)
 
     async def _execute_scroll(self, page_number: int) -> None:
         await self._publish_ui_control({"action": "scroll", "page": page_number})
@@ -162,23 +147,27 @@ class Assistant(Agent):
                 return f"[ERROR] Complete {prereq.id} ({prereq.title}) before this topic."
 
         current = self.current_plan.current_topic
-        if current and current.question and not current.question.completed and current.started:
+        if current and current.assessment and not current.assessment.completed and current.started:
             return "[ERROR] Complete the current topic's question before starting a new topic."
 
         topic.started = True
         self.current_plan.current_topic_index = topic.sequence - 1
-        await self._reframe_board(topic.title)
-        question = topic.question
+
+        # Deterministic visual boundary: clear, re-title, and load this topic's beats.
+        await self.board_runtime.begin_topic(topic)
+        self.board_runtime.set_awaiting_answer(topic.assessment is not None)
+
+        assessment = topic.assessment
         await self._send_current_topic(
             topic.title,
-            question.question if question else "",
-            question.choices if question else [],
+            assessment.question if assessment else "",
+            assessment.choices if assessment else [],
         )
 
         if topic.action and topic.action.type == "scroll" and topic.action.page:
             await self._execute_scroll(topic.action.page)
 
-        return format_topic_content(topic)
+        return format_topic_brief(topic)
 
     async def _finish_current_topic(self) -> str:
         if self.current_plan is None:
@@ -189,8 +178,10 @@ class Assistant(Agent):
         if topic is None:
             return "[ERROR] No active topic."
         topic.completed = True
-        if topic.question:
-            topic.question.completed = True
+        if topic.assessment:
+            topic.assessment.completed = True
+        self.board_runtime.set_awaiting_answer(False)
+        await self.board_runtime.exit_remediation()
         await self._send_topic_done(topic.title)
 
         if topic.sequence < len(plan.topics):
@@ -232,7 +223,11 @@ class Assistant(Agent):
             f"courses/{self.course_id}/{self.chapter_id}/{lesson}.json"
         )
         plan_data = json.loads(plan_json)
-        new_plan = parse_plan(plan_data)
+        try:
+            new_plan = parse_plan(plan_data)
+        except PlanValidationError:
+            logger.exception("Lesson plan rejected", extra={"lesson": lesson})
+            return "[ERROR] This lesson could not be loaded. Ask the student to choose another."
 
         if new_plan.lesson_slug != lesson:
             return "[ERROR] Lesson plan slug does not match the requested lesson."
@@ -257,7 +252,7 @@ class Assistant(Agent):
 
         if self.current_plan is None or self.current_plan.current_topic is None:
             return "[ERROR] No active topic."
-        if self.current_plan.current_topic.question is not None:
+        if self.current_plan.current_topic.assessment is not None:
             return "[ERROR] The active topic has a question. Use check_topic_understanding."
         if self.current_plan.current_topic.completed:
             return "[ERROR] Topic already completed."
@@ -266,11 +261,15 @@ class Assistant(Agent):
     @function_tool(
         description="Evaluates the student's response to the active topic's authored question."
     )
-    async def check_topic_understanding(self, student_understood: bool) -> str:
+    async def check_topic_understanding(
+        self, student_understood: bool, chosen_option_id: str | None = None
+    ) -> str:
         """Evaluate a response to the active topic question.
 
         Args:
             student_understood: Whether the response demonstrates the expected understanding.
+            chosen_option_id: Id of the authored option the student's answer matched, when the
+                question offers options. It selects the remediation the wrong answer earns.
         """
 
         if self.current_plan is None:
@@ -278,24 +277,48 @@ class Assistant(Agent):
 
         current_plan = self.current_plan
         topic = current_plan.current_topic
-        if topic is None or topic.question is None:
+        if topic is None or topic.assessment is None:
             return "[ERROR] No current topic with a question."
 
-        question = topic.question
-        if question.completed:
+        assessment = topic.assessment
+        if assessment.completed:
             return "[ERROR] Question already completed."
 
-        question.student_responded = True
+        assessment.student_responded = True
 
         if student_understood:
             self.checkpoint_answers_counter = 0
             return await self._finish_current_topic()
 
         self.checkpoint_answers_counter += 1
-        if self.checkpoint_answers_counter >= 2:
+        if self.checkpoint_answers_counter >= MAX_ASSESSMENT_ATTEMPTS:
             next_content = await self._finish_current_topic()
             return (
                 "[MAX_RETRIES] Explain the authored expected answer, then continue with the "
                 f"following result:\n{next_content}"
             )
-        return f"[GUIDE] Re-explain using: {question.reexplain_guide}. Then ask again and wait."
+
+        return await self._remediate(topic, assessment, chosen_option_id)
+
+    async def _remediate(
+        self, topic: Topic, assessment: Assessment, chosen_option_id: str | None
+    ) -> str:
+        """Open the remediation rung this wrong answer earns and hand back its direction."""
+
+        misconception = None
+        if chosen_option_id:
+            option = assessment.option_by_id(chosen_option_id)
+            if option is not None and not option.correct:
+                misconception = option.misconception
+
+        rung = topic.rung_for(misconception=misconception, attempt=self.checkpoint_answers_counter)
+        if rung is None:
+            return (
+                f"[GUIDE] Re-explain using: {assessment.reexplain_guide}. Then ask again and wait."
+            )
+
+        await self.board_runtime.enter_remediation(rung)
+        return (
+            f"[GUIDE] Remediation {rung.rung} ({rung.name}): {rung.content} "
+            "Then ask the same question again and wait."
+        )

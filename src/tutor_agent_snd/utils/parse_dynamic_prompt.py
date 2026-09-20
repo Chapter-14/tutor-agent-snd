@@ -84,8 +84,8 @@ Use this to understand the overall course structure.
 
 # Current Chapter Information
 A basic information about the current chapter.
-Current Chapter: {chapter_lessons_data['chapter']}
-Chapter number: {chapter_lessons_data['chapter_number']}
+Current Chapter: {chapter_lessons_data["chapter"]}
+Chapter number: {chapter_lessons_data["chapter_number"]}
 
 # Chapter lessons. Map the user's request to one of these exact slugs, then pass it to get_lesson_plan(lesson).
 {chapter_lessons_schema}

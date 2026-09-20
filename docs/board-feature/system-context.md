@@ -31,26 +31,34 @@ speech.
 ## Current System At A Glance
 
 ```text
-Student voice
+authored lesson plan
     |
+    | topic.segments[].board.beats[]
     v
-LiveKit AgentSession <--> Tutor Agent
-                           |
+  BeatCursor  <---------------------------+
+    |                                     |
+    | pending beats (id, kind, anchor)    | "which beat has he reached?"
+    v                                     |
+Student voice                             |
+    |                                     |
+    v                                     |
+LiveKit AgentSession <--> Tutor Agent     |
+                           |              |
                            | generated text, before TTS
-                           v
-                      BoardRuntime.tee
-                       |             |
+                           v              |
+                      BoardRuntime.tee    |
+                       |             |    |
                        |             +--> TTS --> student hears speech
-                       v
-                 sentence windows
+                       v                  |
+                 sentence windows --------+
                        |
                        v
                 Board Director LLM
                        |
-                    BoardPlan
+                DirectorPlan (beat references, not content)
                        |
                        v
-          BoardRuntime executor and BoardState
+       BeatCursor resolves -> BoardOp -> BoardState
                        |
              reliable LiveKit data message
                        |
@@ -58,23 +66,30 @@ LiveKit AgentSession <--> Tutor Agent
               frontend board renderer
 ```
 
-There is one Tutor Agent, one `BoardRuntime`, one `BoardState`, and one `BoardDirector` per
-LiveKit session. Board state is session-local and is not persisted or shared across students.
+There is one Tutor Agent, one `BoardRuntime`, one `BoardState`, one `BeatCursor`, and one
+`BoardDirector` per LiveKit session. Board state is session-local and is not persisted or shared
+across students.
+
+The defining property of v2: **the Director returns references, not text.** A `fire` operation names
+an authored beat; the beat's wording comes from the plan. The only text-bearing operation the
+Director can emit is `improvise`, which is capped at one per window and restricted to `bullet` and
+`text` items.
 
 ## Responsibility Boundaries
 
 | Component | Owns | Must not own |
 | --- | --- | --- |
-| Tutor Agent | Conversation, teaching approach, lesson progression, assessment, spoken response, topic boundaries | Low-level board planning, board IDs, board timing, frontend rendering |
-| Board Director | Selecting useful visual notes from upcoming tutor speech and authored topic context | Speaking, student interaction, lesson progression, direct frontend publication |
-| BoardRuntime | Speech observation, asynchronous planning, pacing, cancellation, execution | Curriculum or pedagogical decisions |
-| BoardState | Canonical backend board state, validation, IDs, limits, board payload creation | I/O, LLM calls, LiveKit dependencies |
+| Tutor Agent | Conversation, spoken delivery of authored segments, lesson progression, judging answers | Low-level board planning, board IDs, board timing, frontend rendering |
+| Board Director | Deciding **which authored beat** the tutor has reached, and narrow off-plan improvisation | Writing the content of a planned beat, speaking, lesson progression, direct publication |
+| BeatCursor | Beat ordering, the one-segment firing horizon, segment-entry effects, rung lifecycle | LLM calls, publication, curriculum authorship |
+| BoardRuntime | Speech observation, asynchronous planning, reference translation, pacing, cancellation | Curriculum or pedagogical decisions |
+| BoardState | Canonical board state, validation, IDs, regions, capacity, revisions, payload creation | I/O, LLM calls, LiveKit dependencies |
 | Frontend | Rendering, layout, typography, animation, responsive behavior, local teardown reset | Curriculum decisions or semantic validation |
-| Lesson plan | Facts, teaching sequence, examples, terminology guidance, optional assessment, optional scroll location | Runtime state, board IDs, frontend messages, imperative board commands |
+| Lesson plan | Facts, teaching sequence, verbatim wording, terms, **the board's content and when it is due**, assessment, remediation, optional scroll | Runtime state, board IDs, frontend messages, timings, positions |
 
 The governing rule is:
 
-> The Tutor decides what to teach and say. The Board Director decides what may be useful to show. Deterministic code validates, times, and publishes every board mutation.
+> The plan decides what is taught and what is shown. The Tutor decides how it is said. The Board Director decides only when an authored note is due. Deterministic code validates, times, and publishes every board mutation.
 
 ## Tutor And Lesson Flow
 
@@ -98,26 +113,38 @@ The Tutor Agent currently exposes only these workflow tools:
 | --- | --- |
 | `get_lesson_plan(lesson)` | Load an approved lesson slug and activate its first topic. |
 | `advance_to_next_topic()` | Complete an active topic that has no assessment after the student indicates readiness. |
-| `check_topic_understanding(student_understood)` | Evaluate an actual answer to the active authored assessment and progress or re-explain. |
+| `check_topic_understanding(student_understood, chosen_option_id)` | Evaluate an actual answer. `chosen_option_id` names the authored distractor the student picked, which selects the remediation rung their specific misunderstanding earns. |
 
-The Tutor does not have a board tool. It is prompted to make its speech board-friendly: one idea
-per sentence, approximately 10 to 25 words per sentence, explicit concept names, separate
-sentences for parallel facts, and one spoken sentence per process step.
+The Tutor does not have a board tool. It is prompted to make its speech bindable: deliver every
+authored segment in order, one idea per sentence, approximately 10 to 25 words per sentence, and —
+the load-bearing rule — **name the concept explicitly in the sentence that introduces it**, because
+that is what the Director matches a beat's `anchor` against.
+
+Segment transitions are inferred by the Director from the speech, never announced by a tool round.
+The tool count stays at three.
 
 ## Board Runtime Behavior
 
 ### Topic boundaries
 
-Starting a topic is a deterministic visual boundary. Pending reactive operations are invalidated,
-then the runtime clears the old board and sets the topic title. The first visible topic normally
-publishes:
+Starting a topic is a deterministic visual boundary. `BoardRuntime.begin_topic(topic)` invalidates
+pending work, rebuilds the `BeatCursor` from the topic's segments, clears the board and sets the
+title. The first visible topic normally publishes:
 
 ```text
-board_clear -> board_show -> board_set_title
+board_clear {scope: "all"} -> board_show -> board_set_title
 ```
 
 Later topics normally publish `board_clear -> board_set_title` because the board remains visible.
 `board_hide` exists in the state model but production flow does not currently use it.
+
+Segment boundaries are also deterministic, but author-driven rather than code-driven: firing the
+first beat of a segment applies that segment's `on_enter` rule (`keep` or `clear_live`) and opens
+its group container if it declares one.
+
+Remediation is bracketed by code. `enter_remediation(rung)` routes the rung's beats into the
+`temporary` region and makes them the only fireable beats; `exit_remediation()` clears that region
+whole. No model decides a region lifecycle.
 
 ### Reactive planning
 
@@ -129,15 +156,21 @@ The runtime groups up to two sentences into a FIFO planning window. For each win
 Director receives:
 
 - The upcoming tutor sentences.
-- The session language.
-- The active topic title.
-- Up to 1,200 characters of authored topic content.
-- A compact snapshot of the current board, including runtime-generated IDs.
-- Title and item limits and the number of remaining content slots.
+- The session language, topic title, knowledge type, and current segment role.
+- The next three to five **pending beats**: `beat_id | stage | kind | anchor | preview`.
+- A compact snapshot of the current board, including runtime-generated IDs and item state.
+- Per-region capacity.
 
-The Director returns zero to four semantic operations. Empty plans are normal. Director failure,
-timeout, malformed output, or provider failure is fail-open: the Tutor's speech continues and the
-board simply receives no dynamic update for that window.
+Authored prose is no longer passed to the Director. The beats are the context; the segment `content`
+belongs to the tutor.
+
+The Director returns zero to four operations, which are references rather than content. The runtime
+translates each one through the `BeatCursor` before anything reaches `BoardState`; a reference the
+cursor refuses (an unknown beat, an already-fired beat, a beat more than one segment ahead) simply
+does not happen and is counted.
+
+Empty plans are normal. Director failure, timeout, malformed output, or provider failure is
+fail-open: the Tutor's speech continues and the board simply receives no update for that window.
 
 ### Pacing and cancellation
 
@@ -157,34 +190,42 @@ likewise invalidate pending reactive operations before the deterministic clear/t
 
 ## Current Board Command Model
 
-The Board Director has a deliberately small semantic vocabulary:
+Two vocabularies, deliberately different.
 
-| Director operation | Required field | Intended use |
+### What the Director may emit
+
+| Director operation | Required fields | Intended use |
 | --- | --- | --- |
-| `clear` | none | Remove title, items, and emphasis. Usually only deterministic topic code needs this. |
-| `set_title` | `text` | Set or replace the one topic-level title. Usually set automatically. |
-| `add_bullet` | `text` | Add one unordered key point, property, cause, or outcome. |
-| `add_text` | `text` | Add one definition, rule, equation, or compact contrast. |
-| `add_step` | `text` | Add one step in a genuinely ordered process. |
-| `emphasize` | `target_id` | Emphasize an existing title or item. |
+| `fire` | `beat_id` | The tutor has reached this authored beat. |
+| `reveal_next` | `target_id` | The next chunk of a `definition` already on the board. |
+| `update` | `target_id`, `slot`, `text` or `state` | Fill a blank; mark an option after the answer. |
+| `annotate` | `target_id`, `state` | `key`, `warning`, `correct`, `wrong`, `broken`, `dim`. |
+| `remove` | `target_id` | Drop a temporary item the tutor has finished with. |
+| `pin` | `target_id` | Keep an item visible while the live region turns over. |
+| `recall` | `beat_id` | Re-show an item cleared earlier (spaced retrieval). |
+| `improvise` | `kind`, `text` | Off-plan only. `bullet` or `text`, max one per window. |
 
-The Director cannot issue `show` or `hide`; visibility belongs to deterministic code. It cannot
-create IDs. For `emphasize`, it may use only an exact `target_id` that appears in the current board
-snapshot.
-
-The Director emits a structured response shaped like this:
+The Director cannot issue `show`, `hide`, `clear`, `set_title` or `group`; those belong to
+deterministic code. It cannot create IDs, and `fire` carries no text — any text sent with it is
+discarded.
 
 ```json
 {
   "operations": [
-    {
-      "action": "add_text",
-      "text": "Revenue follows control",
-      "target_id": null
-    }
+    { "action": "fire", "beat_id": "b-definition" },
+    { "action": "update", "target_id": "board-options-…", "slot": "opt-cash", "state": "wrong" }
   ]
 }
 ```
+
+### What code applies to `BoardState`
+
+`clear(scope)` · `set_title` · `add(region, kind, payload, group_id)` · `update` · `annotate` ·
+`remove` · `reveal_next` · `pin` · `group(kind, heading)`.
+
+A fired beat compiles into one to three of these: an optional `clear {scope: "live"}` from the
+segment's `on_enter`, an optional `group` container, then the `add` carrying the authored payload.
+They share one release time so a container never appears without its contents.
 
 ## Board-State Invariants
 
@@ -194,55 +235,73 @@ The Director emits a structured response shaped like this:
 | --- | --- |
 | Title | One optional title; a new title replaces it without clearing content. |
 | Title length | At most 80 characters after trimming. |
-| Content capacity | At most six non-title items. |
-| Content length | At most 180 characters after trimming. |
+| Regions | `live` (12 items), `pinned` (6), `temporary` (4). Capacity is per region. |
+| Content length | At most 180 characters for any string anywhere in a payload. |
 | IDs | Opaque UUID-backed IDs generated by backend code only. |
-| Duplicates | Exact duplicate normalized content text is rejected. |
-| Emphasis | One active target at a time; it may be the title or an item. |
-| Clear | Removes title, content, and emphasis but preserves visibility. |
+| Duplicates | An identical payload of the same kind in the same region is rejected. |
+| Annotation | Typed. `key` is exclusive and clears the previous `key` in the same batch; the others coexist. |
+| Slots | `options`, `blanks` and `chain` carry addressable child slots; an unknown slot is rejected. |
+| Reveal | A `definition` reveals one chunk at a time and rejects a reveal past its last chunk. |
+| Pin | Moves an item between `live` and `pinned`, subject to the target region's capacity. |
+| Recall | Items removed or cleared stay addressable by their authored beat id. |
+| Clear | `all`, `live`, or `temporary`. Preserves visibility. Archives what it removes. |
+| Revision | Every accepted mutation increments `rev`, which is stamped on every published payload. |
 | Show/hide | Idempotent. |
-| Text normalization | Trims text and sentence-cases ordinary initial lowercase Latin text; Arabic, `pH`, and `iPhone` are preserved. |
+| Text normalization | Trims and sentence-cases ordinary initial lowercase Latin text; Arabic, `pH`, and `iPhone` are preserved. |
 
-The Director prompt requires compressed notes rather than transcripts. It must retain the Tutor's
-wording, preserve English technical terms in Arabic speech, avoid trailing punctuation and Markdown,
-and return no operation for greetings, questions, elaboration, narrative examples, or duplicate
-ideas.
+Rejections are silent and counted. No rejection is ever fed back to an LLM.
 
 ## Frontend Wire Protocol
 
 All backend UI messages are JSON, sent reliably on the LiveKit data topic `ui-control`.
 
+Every board message carries `rev`.
+
 ```json
-{"action": "board_show"}
-{"action": "board_hide"}
-{"action": "board_clear"}
-{"action": "board_set_title", "id": "<opaque-id>", "text": "Five-Step Model"}
-{"action": "board_add_bullet", "id": "<opaque-id>", "text": "Identify the contract"}
-{"action": "board_add_text", "id": "<opaque-id>", "text": "Revenue follows control"}
-{"action": "board_add_step", "id": "<opaque-id>", "text": "Determine the price"}
-{"action": "board_emphasize", "id": "<existing-opaque-id>"}
+{"action": "board_show", "rev": 2}
+{"action": "board_hide", "rev": 41}
+{"action": "board_clear", "scope": "all", "rev": 1}
+{"action": "board_set_title", "id": "<opaque-id>", "text": "Five-Step Model", "rev": 3}
+{"action": "board_add", "id": "<opaque-id>", "region": "live", "kind": "definition", "payload": {...}, "group_id": null, "rev": 4}
+{"action": "board_update", "id": "<opaque-id>", "slot": "opt-cash", "state": "wrong", "rev": 5}
+{"action": "board_annotate", "id": "<opaque-id>", "kind": "key", "rev": 6}
+{"action": "board_remove", "id": "<opaque-id>", "rev": 7}
+{"action": "board_reveal", "id": "<opaque-id>", "index": 1, "rev": 8}
+{"action": "board_pin", "id": "<opaque-id>", "pinned": true, "region": "pinned", "rev": 9}
+{"action": "board_group", "id": "<opaque-id>", "region": "live", "kind": "columns", "heading": "Signing vs satisfying", "rev": 10}
+{"action": "board_snapshot", "rev": 22, "visible": true, "title": {...}, "groups": [...], "items": [...]}
 ```
 
-Related lesson UI events use the same channel: `set_lesson`, `set_topic`, `topic_done`, `scroll`,
-and `session_ending`.
+Related lesson UI events use the same channel and are unchanged: `set_lesson`, `set_topic`,
+`topic_done`, `scroll`, and `session_ending`.
 
-The frontend implementation is outside this repository. The backend currently does not receive
-acknowledgements, send full snapshots, version messages, support replay on reconnect, or persist
-board state between sessions.
+The frontend implementation is outside this repository; see
+[Frontend Board Spec v2](frontend-board-spec-v2.md) for rendering requirements. The backend does not
+receive acknowledgements and does not persist board state between sessions. `board_snapshot` exists
+and `BoardRuntime.publish_snapshot()` produces it, but **no automatic trigger is wired**: the agent
+has no inbound data-channel handler, so a mid-topic reconnect still shows an empty board until the
+next topic boundary.
 
-## Lesson Plans As Board Context
+## Lesson Plans As Board Content
 
-The Board Director's only authored source is the active topic's `content` string. This string is
-opaque to runtime code: it is not parsed into board instructions, facts, term lists, or teaching
-beats. It can contain ordinary English prose that gives the Tutor useful guidance, including
-optional board intent.
+This is the inversion at the centre of v2. The plan no longer *hints* at the board — it authors it.
 
-For example, a topic may say that a five-stage process should be taught as a connected sequence and
-that the board can support it with one short step per stage. The Tutor decides how to speak; the
-Board Director reacts to the Tutor's actual upcoming sentences. A plan cannot pre-create board item
-IDs, schedule commands, or force a board operation.
+A topic is a typed teaching unit: a `knowledge_type`, a list of `terms`, an ordered list of
+`segments`, a mandatory `loses_marks` line, an optional `assessment`, and a `remediation` ladder.
+Each segment carries prose `content` for the tutor and an optional `board` blueprint holding ordered
+**beats**. A beat is `{id, kind, anchor, payload}`: what the note is, and the idea the tutor will be
+saying when it is due.
 
-See [Lesson Plan Structure](lesson-plan-structure.md) for the exact runtime content contract.
+Thirteen beat kinds exist — `heading`, `text`, `bullet`, `step`, `definition`, `term`, `equation`,
+`compare`, `table`, `chain`, `blanks`, `options`, `callout` — covering the P0 elements in
+`Board_Elements_Catalog_v1_EN.md` without a drawing engine.
+
+A plan still cannot create board item IDs, schedule a command, set a position, or force an
+operation. What it now owns is *what the note says and which stage it belongs to*. What it does not
+own is *the moment it appears*, which only the live speech can decide.
+
+See [Lesson Plan Structure](lesson-plan-structure.md) for the exact runtime content contract, and
+`tests/fixtures/ch18_v2/` for a validated worked example.
 
 ## Important Current Limitations
 
@@ -254,20 +313,23 @@ Treat these as real constraints when proposing near-term ideas:
   run-on buffer in the middle of a word.
 - Board Director calls are serial and internal queues are unbounded. Sustained long generation can
   build planning lag.
-- An in-flight Director response can race a new generation or topic boundary because the current
-  loop does not re-check captured generation and epoch after awaiting the LLM.
-- The executor can race a topic boundary between its stale check and board-state mutation.
-- The normal executor and immediate topic-framing path can both mutate `BoardState`; there is no
-  single serialized mutation/publish path.
 - Backend state changes before frontend publication is known to succeed. A publish failure can make
-  backend and frontend state diverge.
+  backend and frontend state diverge, and with `update` and `remove` in the vocabulary that
+  divergence corrupts rather than merely omits.
 - `ops_published` records accepted operations after attempted publication, not confirmed frontend
   delivery.
 - Interrupted pending operations are dropped, not resumed. Already published items remain visible.
-- The protocol has no revision, acknowledgement, snapshot, replay, reconnect recovery, or session
-  persistence.
-- The board is reactive to what the Tutor already generated. It has no authored teaching-beat
-  cursor, precompiled visual plan, cache, or prefetch.
+- The protocol has a revision counter and a snapshot message, but no acknowledgement, no replay, no
+  automatic resync trigger, and no session persistence.
+- Beat binding quality depends on the tutor actually naming the concept in the sentence that
+  introduces it. When the tutor paraphrases heavily, beats bind late or not at all; a high
+  `improvise` ratio in the stats is the signal that a topic's anchors do not match real speech.
+- A beat passed over is marked skipped and never returns on its own. Only `recall` brings content
+  back, and only for items that were actually shown.
+
+Fixed in v2, previously listed here: the in-flight stale-plan race (generation and epoch are now
+re-checked after the await), the executor/topic-boundary race, and the two competing mutation paths
+(every mutation now goes through one lock-held path, including deterministic topic framing).
 
 ## Idea-Generation Guardrails
 
@@ -296,18 +358,17 @@ also describe the needed contracts and migration path.
 
 The following are open design areas, not existing features:
 
-- Reliability: serialized state mutation, final stale checks, publication confirmation, snapshots,
-  revisions, replay, and reconnection recovery.
-- Synchronization: TTS timing signals, better sentence segmentation, semantic timing anchors, or
-  authored teaching beats.
-- Visual vocabulary: diagrams, comparisons, equations, tables, callouts, or regions while keeping
-  semantic rather than pixel-level commands.
-- Pedagogy: when a visual is genuinely worth showing, how to avoid visual overload, and how plans
-  can provide optional visual intent without becoming imperative scripts.
-- Adaptation: board behavior for re-explanations, student questions, Arabic/mixed text, dense
-  subjects, and process-oriented versus conceptual topics.
-- Evaluation: quality criteria, trace review, latency measurements, test fixtures, and student
-  learning signals.
+- Reliability: publication confirmation, an automatic resync trigger for `board_snapshot`, replay,
+  and reconnection recovery. (Serialized mutation, final stale checks and revisions are now shipped.)
+- Synchronization: TTS word timestamps, better sentence segmentation, and whether a beat's anchor
+  can carry an explicit timing hint without becoming a script.
+- Binding quality: measuring how often a beat fires on the right sentence, and what to do with a
+  topic whose anchors keep missing.
+- Pedagogy: how many beats a topic should carry, when a visual is worth showing at all, and how to
+  author the `procedure` move so worked → faded → solo genuinely lands.
+- Adaptation: board behavior for student questions, dense subjects, and topics whose authored beats
+  run out mid-explanation.
+- Evaluation: quality criteria, trace review, latency measurements, and student learning signals.
 
 ## Expected Output From An Ideation Model
 
@@ -330,15 +391,19 @@ Use code as the final source of truth. The most relevant current files are:
   speech-state clock anchor.
 - `src/tutor_agent_snd/agents/tutor_agent.py`: Tutor tools, topic activation, board framing, and
   LiveKit publication callback.
-- `src/tutor_agent_snd/board/models.py`: structured operation and runtime data models.
-- `src/tutor_agent_snd/board/state.py`: authoritative board validation and wire-payload generation.
-- `src/tutor_agent_snd/board/runtime.py`: tee, sentence queue, Director loop, pacing, cancellation,
-  and execution.
+- `src/tutor_agent_snd/board/models.py`: internal and Director operation models, item kinds.
+- `src/tutor_agent_snd/board/state.py`: authoritative board validation, regions, revisions, payloads.
+- `src/tutor_agent_snd/board/cursor.py`: beat ordering, firing horizon, segment entry, rung lifecycle.
+- `src/tutor_agent_snd/board/runtime.py`: tee, sentence queue, Director loop, reference translation,
+  pacing, cancellation, and the single serialized mutation path.
 - `src/tutor_agent_snd/board/director.py`: Board Director request context and failure policy.
-- `prompts/snd-board-director-prompt.md`: repository artifact for Board Director behavior.
-- `prompts/snd-agent-system-prompt-board-rounds.md`: repository artifact for Tutor delivery style.
-- `docs/current-board-director-architecture.md`: detailed current implementation analysis.
-- `docs/data-models.md`: exact lesson-plan data model.
+- `src/tutor_agent_snd/utils/plan_helpers.py`: the authored plan contract, enforced.
+- `prompts/snd-board-director-prompt-v2.md`: repository artifact for Board Director behavior.
+- `prompts/snd-agent-system-prompt-v3.md`: repository artifact for Tutor delivery.
+- `docs/board-feature/lesson-plan-structure.md`: the authoring contract.
+- `docs/board-feature/frontend-board-spec-v2.md`: rendering requirements per item kind.
+- `docs/current-board-director-architecture.md`: analysis of the v1 implementation; its board
+  sections are superseded by this document.
 
 Repository prompt files are review artifacts. Runtime fetches prompts from Langfuse by the names
 `snd-agent-system-prompt` and `snd-board-director-prompt`, using `latest` outside production and

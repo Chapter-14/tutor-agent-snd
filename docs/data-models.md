@@ -1,5 +1,11 @@
 # Data Models
 
+> **Superseded (v1).** The topic shape described below — seven flat keys with an opaque `content`
+> string and a `question` object — was retired by the teaching-beat schema. The runtime rejects it.
+> The current contract is [Lesson Plan Structure](board-feature/lesson-plan-structure.md); the
+> current wire protocol is [Frontend Board Spec v2](board-feature/frontend-board-spec-v2.md). This
+> file is kept for history.
+
 This document defines the chapter catalog, lesson plan JSON, and in-memory tutoring state used by
 the current runtime.
 

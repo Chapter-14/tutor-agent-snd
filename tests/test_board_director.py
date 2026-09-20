@@ -3,13 +3,30 @@ import asyncio
 from livekit.agents.llm import ChatChunk, ChoiceDelta
 
 from tutor_agent_snd.board.director import BoardDirector
-from tutor_agent_snd.board.models import BoardOp, TopicContext
-from tutor_agent_snd.board.state import BOARD_CONTENT_ITEM_LIMIT, BoardState
+from tutor_agent_snd.board.models import BeatPreview, BoardOp, TopicContext
+from tutor_agent_snd.board.state import REGION_LIMITS, BoardState
 
 PLAN_JSON = (
-    '{"operations":[{"action":"set_title","text":"TCP","target_id":null},'
-    '{"action":"add_bullet","text":"Reliable delivery","target_id":null}]}'
+    '{"operations":[{"action":"fire","beat_id":"b-definition"},'
+    '{"action":"annotate","target_id":"board-bullet-1","state":"key"}]}'
 )
+
+
+def _context() -> TopicContext:
+    return TopicContext(
+        topic_title="Transport Layer",
+        knowledge_type="concept_successive",
+        segment_role="understanding",
+        pending=(
+            BeatPreview(
+                beat_id="b-definition",
+                kind="definition",
+                anchor="reliable delivery means recovery",
+                segment_role="understanding",
+                preview="Reliable delivery / recovers from loss",
+            ),
+        ),
+    )
 
 
 class FakeStream:
@@ -65,7 +82,7 @@ async def _plan(director: BoardDirector, *, snapshot=None, window=None):
     return await director.plan(
         window=window or ["أول فكرة في الشرح."],
         snapshot=snapshot or BoardState().snapshot(),
-        context=TopicContext("Transport Layer", "TCP guarantees ordered delivery."),
+        context=_context(),
     )
 
 
@@ -74,15 +91,15 @@ async def test_a_valid_response_is_parsed_into_operations() -> None:
 
     plan = await _plan(_director(llm))
 
-    assert [op.action for op in plan.operations] == ["set_title", "add_bullet"]
-    assert plan.operations[1].text == "Reliable delivery"
+    assert [op.action for op in plan.operations] == ["fire", "annotate"]
+    assert plan.operations[0].beat_id == "b-definition"
 
 
-async def test_the_request_carries_board_state_topic_and_spoken_window() -> None:
+async def test_the_request_carries_pending_beats_board_state_and_the_window() -> None:
     llm = FakeLLM([PLAN_JSON])
     state = BoardState()
     state.apply(BoardOp(action="set_title", text="TCP"))
-    state.apply(BoardOp(action="add_bullet", text="Reliable delivery"))
+    state.apply(BoardOp(action="add", kind="bullet", payload={"text": "Reliable delivery"}))
 
     await _plan(_director(llm), snapshot=state.snapshot(), window=["الفكرة الأولى.", "الثانية."])
 
@@ -91,10 +108,36 @@ async def test_the_request_carries_board_state_topic_and_spoken_window() -> None
     prompt = messages[1].text_content or ""
     assert "SESSION LANGUAGE: Arabic" in prompt
     assert "Transport Layer" in prompt
-    assert "TCP guarantees ordered delivery." in prompt
+    assert "KNOWLEDGE TYPE: concept_successive" in prompt
+    assert "CURRENT STAGE: understanding" in prompt
+    assert "b-definition | understanding | definition | reliable delivery means recovery" in prompt
     assert "| title | TCP" in prompt
     assert "الفكرة الأولى." in prompt and "الثانية." in prompt
-    assert f"CONTENT SLOTS REMAINING: {BOARD_CONTENT_ITEM_LIMIT - 1}" in prompt
+    assert f"live 1/{REGION_LIMITS['live']}" in prompt
+
+
+async def test_the_request_never_leaks_authored_prose_the_tutor_owns() -> None:
+    llm = FakeLLM([PLAN_JSON])
+
+    await _plan(_director(llm))
+
+    prompt = llm.calls[0]["chat_ctx"].items[1].text_content or ""
+    # The Director sees beat previews, never the segment content the tutor teaches from.
+    assert "AUTHORED TOPIC CONTENT" not in prompt
+
+
+async def test_an_exhausted_topic_says_so_rather_than_inviting_invention() -> None:
+    llm = FakeLLM([PLAN_JSON])
+    director = _director(llm)
+
+    await director.plan(
+        window=["خلصنا الفكرة."],
+        snapshot=BoardState().snapshot(),
+        context=TopicContext(topic_title="Transport Layer"),
+    )
+
+    prompt = llm.calls[0]["chat_ctx"].items[1].text_content or ""
+    assert "every authored beat for this topic has been shown" in prompt
 
 
 async def test_structured_output_and_no_retry_are_requested() -> None:
@@ -103,7 +146,7 @@ async def test_structured_output_and_no_retry_are_requested() -> None:
     await _plan(_director(llm))
 
     call = llm.calls[0]
-    assert call["response_format"].__name__ == "BoardPlan"
+    assert call["response_format"].__name__ == "DirectorPlan"
     assert call["conn_options"].max_retry == 0
 
 

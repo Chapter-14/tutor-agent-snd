@@ -1,17 +1,24 @@
 """Board runtime: speech feed, Director loop, and paced executor.
 
-Three concerns live here, all deliberately free of LiveKit imports so they can be
+Four concerns live here, all deliberately free of LiveKit imports so they can be
 tested without a room or a session:
 
 * **Feed** - :meth:`BoardRuntime.tee` sits in ``Agent.tts_node`` and forwards every text
   delta untouched while splitting a copy into sentences.
-* **Director loop** - turns sentence windows into :class:`BoardPlan` operations.
+* **Director loop** - turns sentence windows into beat references.
+* **Translation** - resolves those references against the :class:`BeatCursor` into
+  concrete operations. A reference the cursor refuses simply does not happen.
 * **Executor loop** - releases each operation on an estimated speech clock, drops stale
   and interrupted work, then publishes it.
 
 Text reaches ``tts_node`` seconds before the matching audio is heard, so without the
 speech clock a thirty-second explanation would draw its whole board in the first two
 seconds.
+
+Every mutation of :class:`~tutor_agent_snd.board.state.BoardState` goes through
+:meth:`_apply_and_publish` under one lock, including the deterministic topic frame.
+With ``update`` and ``remove`` in the vocabulary, two writers racing no longer means a
+missing line — it means a corrupted one.
 """
 
 import asyncio
@@ -20,18 +27,23 @@ import re
 import time
 from collections import Counter
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
+from dataclasses import replace
 from typing import Protocol
 from uuid import uuid4
 
+from tutor_agent_snd.board.cursor import GROUP_SENTINEL, BeatCursor
 from tutor_agent_snd.board.models import (
+    IMPROVISABLE_KINDS,
     BoardOp,
-    BoardPlan,
     BoardSnapshot,
+    DirectorOp,
+    DirectorPlan,
     PendingOp,
     SpeechChunk,
     TopicContext,
 )
-from tutor_agent_snd.board.state import BoardState
+from tutor_agent_snd.board.state import BOARD_TITLE_MAX_LENGTH, BoardState
+from tutor_agent_snd.domain_types import RemediationRung, Topic
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +51,7 @@ DEFAULT_WORDS_PER_SECOND = 2.0
 MAX_BUFFERED_SENTENCE_CHARS = 240
 MAX_WINDOW_SENTENCES = 2
 MAX_RELEASE_SLEEP = 0.25
+MAX_IMPROVISED_PER_WINDOW = 1
 
 # Sentence terminators for both scripts the tutor speaks. The Arabic question mark
 # (U+061F) is missing from the shared tokenizer in livekit.agents.tokenize.basic.
@@ -54,7 +67,7 @@ class SupportsPlan(Protocol):
         window: list[str],
         snapshot: BoardSnapshot,
         context: TopicContext,
-    ) -> BoardPlan: ...
+    ) -> DirectorPlan: ...
 
 
 class BoardRuntime:
@@ -65,7 +78,6 @@ class BoardRuntime:
         *,
         publish: Callable[[dict], Awaitable[None]],
         director: SupportsPlan,
-        context_provider: Callable[[], TopicContext],
         is_interrupted: Callable[[], bool] = lambda: False,
         state: BoardState | None = None,
         words_per_second: float = DEFAULT_WORDS_PER_SECOND,
@@ -74,7 +86,6 @@ class BoardRuntime:
     ) -> None:
         self._publish = publish
         self._director = director
-        self._context_provider = context_provider
         self._is_interrupted = is_interrupted
         self._state = state or BoardState()
         self._words_per_second = words_per_second
@@ -84,6 +95,13 @@ class BoardRuntime:
         self._chunk_queue: asyncio.Queue[SpeechChunk] = asyncio.Queue()
         self._op_queue: asyncio.Queue[PendingOp] = asyncio.Queue()
         self._tasks: list[asyncio.Task] = []
+        self._mutation_lock = asyncio.Lock()
+
+        self._cursor = BeatCursor()
+        self._topic_title = ""
+        self._knowledge_type = ""
+        self._awaiting_answer = False
+        self._group_ids: dict[str, str] = {}
 
         self._generation_id: str | None = None
         self._epoch = 0
@@ -116,6 +134,55 @@ class BoardRuntime:
     @property
     def state(self) -> BoardState:
         return self._state
+
+    @property
+    def cursor(self) -> BeatCursor:
+        return self._cursor
+
+    # Topic and remediation boundaries - deterministic, no LLM, no pacing
+
+    async def begin_topic(self, topic: Topic) -> None:
+        """Reset the board at a topic boundary and load its authored beats."""
+
+        self._cursor = BeatCursor(topic)
+        self._topic_title = topic.title
+        self._knowledge_type = topic.knowledge_type
+        self._awaiting_answer = False
+        self._group_ids.clear()
+        await self.apply_now(
+            [
+                BoardOp(action="clear", scope="all"),
+                BoardOp(action="set_title", text=topic.title[:BOARD_TITLE_MAX_LENGTH]),
+            ]
+        )
+
+    async def enter_remediation(self, rung: RemediationRung) -> None:
+        """Open a remediation detour; its beats become the only fireable ones."""
+
+        ops = self._cursor.enter_rung(rung)
+        if ops:
+            await self.apply_now(ops)
+
+    async def exit_remediation(self) -> None:
+        """Drop the detour and everything it put on the board."""
+
+        ops = self._cursor.exit_rung()
+        if ops:
+            await self.apply_now(ops)
+
+    def set_awaiting_answer(self, awaiting: bool) -> None:
+        self._awaiting_answer = awaiting
+
+    async def apply_now(self, ops: list[BoardOp]) -> None:
+        """Apply and publish operations immediately, cancelling anything still pending."""
+
+        self._invalidate_pending()
+        await self._apply_and_publish(tuple(ops))
+
+    async def publish_snapshot(self) -> None:
+        """Send the whole board, for reconnect or divergence recovery."""
+
+        await self._send(self._state.snapshot_payload())
 
     # Speech feed
 
@@ -198,6 +265,15 @@ class BoardRuntime:
 
     # Director loop
 
+    def _context(self) -> TopicContext:
+        return TopicContext(
+            topic_title=self._topic_title,
+            knowledge_type=self._knowledge_type,
+            segment_role=self._cursor.current_role,
+            pending=self._cursor.previews(),
+            awaiting_answer=self._awaiting_answer,
+        )
+
     async def _director_loop(self) -> None:
         while True:
             window = [await self._chunk_queue.get()]
@@ -205,6 +281,7 @@ class BoardRuntime:
                 window.append(self._chunk_queue.get_nowait())
 
             generation_id = window[-1].generation_id
+            epoch = self._epoch
             if generation_id != self._generation_id:
                 self.stats["windows_dropped_stale"] += 1
                 continue
@@ -213,7 +290,7 @@ class BoardRuntime:
                 plan = await self._director.plan(
                     window=[chunk.sentence for chunk in window],
                     snapshot=self._state.snapshot(),
-                    context=self._context_provider(),
+                    context=self._context(),
                 )
             except asyncio.CancelledError:
                 raise
@@ -222,23 +299,112 @@ class BoardRuntime:
                 logger.exception("Board director failed", extra={"generation_id": generation_id})
                 continue
 
+            # The topic or the speech may have moved on while the Director was thinking.
+            if epoch != self._epoch or generation_id != self._generation_id:
+                self.stats["plans_dropped_stale"] += 1
+                continue
+
             self.stats["plans"] += 1
             if not plan.operations:
                 self.stats["plans_empty"] += 1
                 continue
 
-            # Spread the batch across the window's sentences so a multi-sentence window
-            # does not dump every item onto the board at the same instant.
-            for index, op in enumerate(plan.operations):
-                anchor = window[min(index, len(window) - 1)]
-                self._op_queue.put_nowait(
-                    PendingOp(
-                        generation_id=generation_id,
-                        epoch=self._epoch,
-                        word_offset=anchor.word_offset,
-                        op=op,
-                    )
+            self._queue_plan(plan, window, generation_id, epoch)
+
+    def _queue_plan(
+        self,
+        plan: DirectorPlan,
+        window: list[SpeechChunk],
+        generation_id: str,
+        epoch: int,
+    ) -> None:
+        """Translate references into operations and spread them across the window."""
+
+        improvised = 0
+        for index, director_op in enumerate(plan.operations):
+            if director_op.action == "improvise":
+                if improvised >= MAX_IMPROVISED_PER_WINDOW:
+                    self.stats["improvise_capped"] += 1
+                    continue
+                improvised += 1
+
+            ops = self._translate(director_op)
+            if not ops:
+                continue
+
+            anchor = window[min(index, len(window) - 1)]
+            self._op_queue.put_nowait(
+                PendingOp(
+                    generation_id=generation_id,
+                    epoch=epoch,
+                    word_offset=anchor.word_offset,
+                    ops=tuple(ops),
                 )
+            )
+
+    def _translate(self, op: DirectorOp) -> list[BoardOp]:
+        """Resolve one Director reference into concrete board operations."""
+
+        if op.action == "fire":
+            if not op.beat_id:
+                self.stats["fire_missing_beat_id"] += 1
+                return []
+            result = self._cursor.fire(op.beat_id)
+            if result is None:
+                self.stats["fire_refused"] += 1
+                logger.info("board_beat_refused", extra={"beat_id": op.beat_id})
+                return []
+            self.stats["beats_fired"] += 1
+            return result.ops
+
+        if op.action == "recall":
+            archived = self._state.archived(op.beat_id or "")
+            if archived is None:
+                self.stats["recall_unknown"] += 1
+                return []
+            self.stats["recalls"] += 1
+            return [
+                BoardOp(
+                    action="add",
+                    region="live",
+                    kind=archived.kind,
+                    payload=archived.payload,
+                    source_id=archived.source_id,
+                )
+            ]
+
+        if op.action == "improvise":
+            if op.kind not in IMPROVISABLE_KINDS or not op.text:
+                self.stats["improvise_rejected"] += 1
+                return []
+            self.stats["improvised"] += 1
+            return [BoardOp(action="add", region="live", kind=op.kind, payload={"text": op.text})]
+
+        if not op.target_id:
+            self.stats["op_missing_target"] += 1
+            return []
+
+        if op.action == "reveal_next":
+            return [BoardOp(action="reveal_next", target_id=op.target_id)]
+        if op.action == "update":
+            return [
+                BoardOp(
+                    action="update",
+                    target_id=op.target_id,
+                    slot=op.slot,
+                    text=op.text,
+                    state=op.state,
+                )
+            ]
+        if op.action == "annotate":
+            return [BoardOp(action="annotate", target_id=op.target_id, state=op.state)]
+        if op.action == "remove":
+            return [BoardOp(action="remove", target_id=op.target_id)]
+        if op.action == "pin":
+            return [BoardOp(action="pin", target_id=op.target_id, pinned=True)]
+
+        self.stats["unsupported_director_action"] += 1
+        return []
 
     # Executor loop
 
@@ -247,13 +413,13 @@ class BoardRuntime:
             pending = await self._op_queue.get()
             if not await self._await_release(pending):
                 continue
-            await self._apply_and_publish(pending.op, pending.word_offset)
+            await self._apply_and_publish(pending.ops, pending)
 
     async def _await_release(self, pending: PendingOp) -> bool:
         """Hold an operation until the tutor reaches its sentence. False means drop it."""
 
         while True:
-            if pending.epoch != self._epoch or pending.generation_id != self._generation_id:
+            if self._is_stale(pending):
                 self.stats["ops_dropped_stale"] += 1
                 return False
             if self._is_interrupted():
@@ -268,26 +434,56 @@ class BoardRuntime:
                 return True
             await self._sleep(min(delay, MAX_RELEASE_SLEEP))
 
-    async def _apply_and_publish(self, op: BoardOp, word_offset: int | None = None) -> None:
-        result = self._state.apply(op)
-        if result.rejection is not None:
-            self.stats[f"rejected_{result.rejection}"] += 1
-            logger.info(
-                "board_op_rejected",
-                extra={"board_action": op.action, "reason": result.rejection},
-            )
-            return
+    def _is_stale(self, pending: PendingOp) -> bool:
+        return pending.epoch != self._epoch or pending.generation_id != self._generation_id
 
-        for payload in result.payloads:
-            await self._send(payload)
-        self.stats["ops_published"] += 1
+    async def _apply_and_publish(
+        self, ops: tuple[BoardOp, ...], pending: PendingOp | None = None
+    ) -> None:
+        """The single serialized mutation path. Every board change passes here."""
+
+        async with self._mutation_lock:
+            # Re-checked inside the lock: a topic boundary may have landed while this
+            # operation waited for it.
+            if pending is not None and self._is_stale(pending):
+                self.stats["ops_dropped_stale"] += 1
+                return
+
+            for op in ops:
+                op = self._resolve_group(op)
+                result = self._state.apply(op)
+                if result.rejection is not None:
+                    self.stats[f"rejected_{result.rejection}"] += 1
+                    logger.info(
+                        "board_op_rejected",
+                        extra={"board_action": op.action, "reason": result.rejection},
+                    )
+                    continue
+
+                if op.action == "group" and op.source_id:
+                    self._group_ids[op.source_id] = result.payloads[-1]["id"]
+
+                for payload in result.payloads:
+                    await self._send(payload)
+                self.stats["ops_published"] += 1
+                self._log_published(op, pending)
+
+    def _resolve_group(self, op: BoardOp) -> BoardOp:
+        """Swap a segment's group sentinel for the container's real id."""
+
+        if op.action != "add" or not op.group_id or not op.group_id.startswith(GROUP_SENTINEL):
+            return op
+        return replace(op, group_id=self._group_ids.get(op.group_id[len(GROUP_SENTINEL) :]))
+
+    def _log_published(self, op: BoardOp, pending: PendingOp | None) -> None:
         anchor = self._speech_started_at
         logger.info(
             "board_op_published",
             extra={
                 "board_action": op.action,
+                "board_kind": op.kind,
                 "generation_id": self._generation_id,
-                "word_offset": word_offset,
+                "word_offset": None if pending is None else pending.word_offset,
                 "speech_elapsed": None if anchor is None else round(self._clock() - anchor, 2),
             },
         )
@@ -298,12 +494,3 @@ class BoardRuntime:
         except Exception:
             self.stats["publish_failed"] += 1
             logger.exception("Failed to publish board payload", extra={"payload": payload})
-
-    # Deterministic path (topic boundaries) - no LLM, no pacing
-
-    async def publish_now(self, ops: list[BoardOp]) -> None:
-        """Apply and publish operations immediately, cancelling anything still pending."""
-
-        self._invalidate_pending()
-        for op in ops:
-            await self._apply_and_publish(op)

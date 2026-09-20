@@ -1,5 +1,11 @@
 # Project Technical Analysis
 
+> **Partly superseded (v1).** The session lifecycle, voice pipeline, prompt deployment, Bunny
+> integration and observability sections still hold. The lesson-plan model, teaching-board behavior
+> and tool-surface sections predate the teaching-beat schema. See
+> [Lesson Plan Structure](board-feature/lesson-plan-structure.md) and
+> [System Context](board-feature/system-context.md).
+
 ## Summary
 
 This repository is a Python `src`-layout LiveKit voice tutor. It runs a real-time speech pipeline,
