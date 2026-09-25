@@ -11,24 +11,62 @@
       "requires_completion_of": null,
       "action": { "type": "scroll", "page": 6 },
       "knowledge_type": "mechanism",
-      "terms": [],
+      "terms": [
+        { "en": "revenue recognition", "ar": "الاعتراف بالإيراد" }
+      ],
       "segments": [
         {
-          "id": "overview-purpose",
+          "id": "overview-definition",
           "role": "understanding",
-          "content": "Introduce the model as one connected process rather than five separate rules. Revenue should depict the transfer of promised goods or services for the consideration the company expects to receive. Use the Airbus agreement to sell airplanes to Cathay Pacific for 100 million euros as the running example that carries through all five steps.",
+          "content": "Open with the purpose before the mechanics of the five-step revenue recognition model. Revenue should depict the transfer of promised goods or services for the consideration the company expects to receive. Preview that the five steps work as one connected chain, not five separate rules. Airbus agreeing to sell airplanes to Cathay Pacific for 100 million euros is the running example that carries through every step ahead.",
           "must_say": [
             "Revenue should depict the transfer of promised goods or services for the consideration the company expects to receive."
           ],
           "board": {
             "region": "live",
-            "on_enter": "keep",
+            "on_enter": "clear_live",
             "group": null,
             "beats": [
               {
-                "id": "b-chain-overview",
+                "id": "b-ov-term",
+                "kind": "term",
+                "anchor": "the five-step revenue recognition model",
+                "payload": { "en": "revenue recognition", "ar": "الاعتراف بالإيراد" }
+              },
+              {
+                "id": "b-ov-definition",
+                "kind": "text",
+                "anchor": "revenue should depict the transfer of promised goods or services",
+                "payload": {
+                  "text": "Revenue depicts the transfer of promised goods or services for expected consideration"
+                }
+              },
+              {
+                "id": "b-ov-example",
+                "kind": "callout",
+                "anchor": "Airbus agreeing to sell airplanes to Cathay Pacific for 100 million euros",
+                "payload": {
+                  "kind": "example",
+                  "text": "Running example: Airbus sells airplanes to Cathay Pacific for €100 million"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "overview-chain",
+          "role": "understanding",
+          "content": "Show the five steps as one connected chain rather than an isolated checklist: identify the contract, identify performance obligations, determine the transaction price, allocate the transaction price, and recognize revenue. Each link depends on the one before it, so skipping ahead breaks the chain and costs marks.",
+          "must_say": [],
+          "board": {
+            "region": "pinned",
+            "on_enter": "clear_live",
+            "group": { "kind": "box", "heading": "The five-step chain" },
+            "beats": [
+              {
+                "id": "b-ov-chain",
                 "kind": "chain",
-                "anchor": "the five steps form one connected chain from contract to recognition",
+                "anchor": "identify the contract, identify performance obligations, determine the transaction price, allocate the transaction price, and recognize revenue",
                 "payload": {
                   "links": [
                     "Identify the contract",
@@ -39,16 +77,58 @@
                   ],
                   "break_at": null
                 }
+              },
+              {
+                "id": "b-ov-chain-note",
+                "kind": "text",
+                "anchor": "each link depends on the one before it",
+                "payload": { "text": "Each link depends on the one before it" }
               }
             ]
           }
         },
         {
           "id": "overview-airbus-walkthrough",
-          "role": "understanding",
-          "content": "Walk the Airbus example through each link so the chain feels concrete rather than abstract. Identifying the customer contract is the Airbus-Cathay Pacific agreement itself. Identifying performance obligations means airplane delivery is the promise in this basic example. Determining the transaction price means the agreement has a fixed price of 100 million euros. Allocating the transaction price means the single obligation receives the full price, because there is only one promise. Recognizing revenue when the obligation is satisfied means revenue is recorded only once delivery transfers control of the airplanes. Summarize the chain as contract, promises, price, allocation, and recognition.",
+          "role": "worked_example",
+          "content": "Walk the Airbus example through each link so the chain feels concrete rather than abstract. Identifying the customer contract is the Airbus-Cathay Pacific agreement itself. Identifying performance obligations means airplane delivery is the one promise in this basic example. Determining the transaction price means the agreement fixes it at 100 million euros. Allocating the transaction price gives the single obligation the full 100 million, because there is only one promise to satisfy. Recognizing revenue when the obligation is satisfied means revenue is recorded only once delivery transfers control of the airplanes to Cathay Pacific.",
           "must_say": [],
-          "board": null
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-ov-step-contract",
+                "kind": "step",
+                "anchor": "identifying the customer contract is the Airbus-Cathay Pacific agreement itself",
+                "payload": { "text": "Step 1 — Contract: the Airbus-Cathay Pacific agreement" }
+              },
+              {
+                "id": "b-ov-step-obligation",
+                "kind": "step",
+                "anchor": "identifying performance obligations means airplane delivery is the one promise",
+                "payload": { "text": "Step 2 — Obligation: deliver the airplanes" }
+              },
+              {
+                "id": "b-ov-step-price",
+                "kind": "step",
+                "anchor": "determining the transaction price means the agreement fixes it at 100 million euros",
+                "payload": { "text": "Step 3 — Price: fixed at €100 million" }
+              },
+              {
+                "id": "b-ov-step-allocation",
+                "kind": "step",
+                "anchor": "allocating the transaction price gives the single obligation the full 100 million",
+                "payload": { "text": "Step 4 — Allocation: full €100 million to one obligation" }
+              },
+              {
+                "id": "b-ov-step-recognition",
+                "kind": "step",
+                "anchor": "recognizing revenue only once delivery transfers control of the airplanes",
+                "payload": { "text": "Step 5 — Recognition: booked at delivery" }
+              }
+            ]
+          }
         },
         {
           "id": "overview-warning",
@@ -99,7 +179,26 @@
           }
         ],
         "reexplain_guide": "Use a simple sale: confirm the agreement, identify what was promised, determine and allocate the price, then record revenue only when the promise is fulfilled.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-ov-options",
+              "kind": "options",
+              "anchor": "what determines when a company actually records revenue",
+              "payload": {
+                "stem": "What determines when a company actually records revenue?",
+                "options": [
+                  { "id": "opt-signing", "text": "Signing the contract", "correct": false },
+                  { "id": "opt-satisfied", "text": "Obligation satisfied, control transferred", "correct": true },
+                  { "id": "opt-price", "text": "Transaction price determined", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Treating the five steps as separate rules instead of one chain that ends only when the obligation is satisfied.",
       "remediation": [
@@ -136,7 +235,19 @@
           "rung": 2,
           "trigger": "price_confusion",
           "content": "Re-anchor on the chain: the price is only step three. Two more links, allocation and recognition, still have to happen before revenue is recorded.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-two-links",
+                "kind": "text",
+                "anchor": "two more links, allocation and recognition, still have to happen",
+                "payload": { "text": "Price set is not price allocated or recognized" }
+              }
+            ]
+          }
         }
       ]
     },
@@ -152,7 +263,7 @@
         {
           "id": "contract-criteria",
           "role": "understanding",
-          "content": "Teach the contract criteria as a decision gate rather than an isolated list. The parties must approve the arrangement, commit to perform, expect commercial substance, identify each party's rights and payment terms, and conclude that collection is probable. Contracts may be written, oral, or implied, but revenue is not recognized until a qualifying contract exists and performance occurs. Name each criterion as you reach it.",
+          "content": "Teach the contract criteria as a decision gate, not an isolated list. Five conditions must all be true before a qualifying contract exists. The parties must approve the arrangement and commit to perform their obligations. The arrangement must have commercial substance, not merely paperwork. Each party's rights to the goods or services must be identifiable, and so must the payment terms. Finally, the company must conclude that collecting the consideration is probable. Contracts may be written, oral, or implied, but revenue is not recognized until every condition is met and performance occurs. Name each criterion as you reach it.",
           "must_say": [],
           "board": {
             "region": "live",
@@ -162,24 +273,32 @@
               {
                 "id": "b-criteria-approved",
                 "kind": "bullet",
-                "anchor": "the parties have approved the arrangement and it has commercial substance",
-                "payload": {
-                  "text": "Approved, committed, and commercially substantive"
-                }
+                "anchor": "the parties must approve the arrangement and commit to perform",
+                "payload": { "text": "Approved by both parties, who commit to perform" }
+              },
+              {
+                "id": "b-criteria-substance",
+                "kind": "bullet",
+                "anchor": "the arrangement must have commercial substance",
+                "payload": { "text": "Has commercial substance, not just paperwork" }
               },
               {
                 "id": "b-criteria-rights",
                 "kind": "bullet",
-                "anchor": "each party's rights and payment terms are identifiable",
-                "payload": {
-                  "text": "Rights and payment terms are identifiable"
-                }
+                "anchor": "each party's rights to the goods or services must be identifiable",
+                "payload": { "text": "Each party's rights are identifiable" }
+              },
+              {
+                "id": "b-criteria-payment",
+                "kind": "bullet",
+                "anchor": "the payment terms must be identifiable too",
+                "payload": { "text": "Payment terms are identifiable" }
               },
               {
                 "id": "b-criteria-collection",
                 "kind": "bullet",
-                "anchor": "collection of the consideration is probable",
-                "payload": { "text": "Collection is probable" }
+                "anchor": "the company must conclude that collecting the consideration is probable",
+                "payload": { "text": "Collection of consideration is probable" }
               }
             ]
           }
@@ -197,6 +316,12 @@
               "heading": "Qualifying vs unperformed"
             },
             "beats": [
+              {
+                "id": "b-contract-either-walks",
+                "kind": "text",
+                "anchor": "either party can walk away from a wholly unperformed arrangement",
+                "payload": { "text": "Unperformed arrangement: either party can walk away" }
+              },
               {
                 "id": "b-contract-compare",
                 "kind": "compare",
@@ -270,7 +395,26 @@
           }
         ],
         "reexplain_guide": "Compare a firm order with clear goods, price, and likely payment against a vague discussion that either party can abandon without consequence.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-contract-options",
+              "kind": "options",
+              "anchor": "which arrangement satisfies the criteria for a qualifying contract",
+              "payload": {
+                "stem": "Which arrangement satisfies the criteria for a qualifying contract?",
+                "options": [
+                  { "id": "opt-firm-order", "text": "Firm order: rights, terms, probable collection", "correct": true },
+                  { "id": "opt-negotiating", "text": "Still negotiating, no firm commitment", "correct": false },
+                  { "id": "opt-cancellable", "text": "Cancellable without penalty", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Calling any signed document a qualifying contract without checking rights, payment terms, and probable collection.",
       "remediation": [
@@ -278,7 +422,7 @@
           "id": "rung-contract-default",
           "rung": 1,
           "trigger": "default",
-          "content": "Re-anchor on the three bullets already on the board: approved and committed, rights and payment terms identifiable, collection probable.",
+          "content": "Re-anchor on the bullets already on the board: approved and committed, commercial substance, rights and payment terms identifiable, collection probable.",
           "board": null
         },
         {
@@ -286,7 +430,19 @@
           "rung": 1,
           "trigger": "no_commitment",
           "content": "Point back at the first bullet: approval and commitment to perform. A discussion with no firm commitment has not cleared that bar yet.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-no-commitment",
+                "kind": "text",
+                "anchor": "a discussion with no firm commitment has not cleared that bar",
+                "payload": { "text": "No firm commitment = criterion one not met" }
+              }
+            ]
+          }
         },
         {
           "id": "rung-contract-cancellable",
@@ -326,7 +482,7 @@
         {
           "id": "obligation-definition",
           "role": "understanding",
-          "content": "Focus on the meaning of a distinct promise and the effect of interdependence. A performance obligation is a promise to transfer a distinct good or service, and the customer must be able to benefit from it. Finish with the test: identify each promise, decide whether it is distinct, and determine whether it is independent or part of one integrated output.",
+          "content": "Focus on the meaning of a distinct promise and the effect of interdependence. A performance obligation is a promise to transfer a distinct good or service, and the customer must be able to benefit from it on its own. Finish with the three-part test: identify each promise, decide whether it is distinct, and determine whether it is independent or part of one integrated output.",
           "must_say": [
             "A performance obligation is a promise to transfer a distinct good or service, and the customer must be able to benefit from it."
           ],
@@ -343,46 +499,96 @@
                   "en": "performance obligation",
                   "ar": "التزام الأداء"
                 }
+              },
+              {
+                "id": "b-obligation-definition-chunks",
+                "kind": "definition",
+                "anchor": "the customer must be able to benefit from it on its own",
+                "payload": {
+                  "chunks": [
+                    "A performance obligation is a promise",
+                    "to transfer a distinct good or service",
+                    "that the customer can benefit from on its own"
+                  ],
+                  "key_words": ["distinct", "benefit"]
+                }
+              },
+              {
+                "id": "b-obligation-test",
+                "kind": "bullet",
+                "anchor": "identify each promise, decide whether it is distinct, and check independence",
+                "payload": { "text": "Test: identify, check distinct, check independent" }
               }
             ]
           }
         },
         {
-          "id": "obligation-contrast",
+          "id": "obligation-softtech",
           "role": "comparison",
-          "content": "Use SoftTech to show that a license and extensive customization can form one integrated output and therefore one obligation. Use Chen Computer to show that an extended service warranty sold separately is a second obligation, because the assurance warranty that supports the computer stays with that obligation while the optional extended warranty is independent. Do not read source slides verbatim.",
+          "content": "Use SoftTech to show that two promises can form a single integrated obligation. SoftTech licenses software and performs extensive customization so significant that neither promise is separable from the other. Because the two are interdependent, they are accounted for as one performance obligation, not two.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-softtech-example",
+                "kind": "callout",
+                "anchor": "SoftTech licenses software and performs extensive customization",
+                "payload": {
+                  "kind": "example",
+                  "text": "SoftTech: license + customization = one integrated obligation"
+                }
+              },
+              {
+                "id": "b-softtech-interdependent",
+                "kind": "text",
+                "anchor": "the two are interdependent, so they are one performance obligation",
+                "payload": { "text": "Interdependent promises combine into a single obligation" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "obligation-chencomputer",
+          "role": "comparison",
+          "content": "Contrast that with Chen Computer, which sells a laptop with a standard assurance warranty and offers an optional extended service warranty. The assurance warranty simply supports the laptop working as promised, so it stays bundled with that obligation. The extended warranty can be bought or declined on its own, which is exactly what makes it a second, independent performance obligation.",
           "must_say": [],
           "board": {
             "region": "live",
             "on_enter": "keep",
             "group": {
               "kind": "columns",
-              "heading": "Combined vs separate promises"
+              "heading": "Assurance vs extended warranty"
             },
             "beats": [
               {
-                "id": "b-obligation-compare",
+                "id": "b-chencomputer-compare",
                 "kind": "compare",
-                "anchor": "combine interdependent promises but separate independent ones",
+                "anchor": "the assurance warranty stays bundled while the extended warranty is independent",
                 "payload": {
-                  "aspect_label": "Example",
-                  "columns": [
-                    "Combine interdependent promises",
-                    "Separate independent promises"
-                  ],
+                  "aspect_label": "Aspect",
+                  "columns": ["Assurance warranty", "Extended warranty"],
                   "rows": [
                     {
-                      "aspect": "SoftTech license + customization",
-                      "x": "One integrated output, one obligation",
-                      "y": "Not applicable here"
+                      "aspect": "Purchasable separately?",
+                      "x": "No, bundled with the laptop",
+                      "y": "Yes, sold on its own"
                     },
                     {
-                      "aspect": "Chen Computer + extended warranty",
-                      "x": "Not applicable here",
-                      "y": "Extended warranty is its own obligation"
+                      "aspect": "Performance obligation?",
+                      "x": "No, part of the laptop obligation",
+                      "y": "Yes, a separate obligation"
                     }
                   ]
                 }
+              },
+              {
+                "id": "b-chencomputer-rule",
+                "kind": "bullet",
+                "anchor": "buyable separately is exactly what makes it a distinct obligation",
+                "payload": { "text": "Buyable separately = separate obligation" }
               }
             ]
           }
@@ -436,7 +642,26 @@
           }
         ],
         "reexplain_guide": "Use a computer example: an assurance warranty supports the computer and stays with that obligation, while an optional extended service warranty can be purchased separately and is its own obligation.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-obligation-options",
+              "kind": "options",
+              "anchor": "how many performance obligations exist for the laptop and both warranties",
+              "payload": {
+                "stem": "How many performance obligations exist if the customer buys both warranties?",
+                "options": [
+                  { "id": "opt-two-obligations", "text": "Two: laptop+assurance, and extended warranty", "correct": true },
+                  { "id": "opt-one-obligation", "text": "One: warranties never separate", "correct": false },
+                  { "id": "opt-three-obligations", "text": "Three: laptop, assurance, extended", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Counting one integrated output as two obligations, or missing a genuinely separate one like an optional extended warranty.",
       "remediation": [
@@ -473,7 +698,19 @@
           "rung": 1,
           "trigger": "over_splitting",
           "content": "Point back at the assurance warranty specifically: it cannot be purchased or declined on its own, so it is not a distinct promise, it travels with the laptop.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-not-purchasable",
+                "kind": "text",
+                "anchor": "the assurance warranty cannot be purchased or declined on its own",
+                "payload": { "text": "Not separately purchasable = not a distinct promise" }
+              }
+            ]
+          }
         }
       ]
     },
@@ -492,9 +729,9 @@
       ],
       "segments": [
         {
-          "id": "price-components",
+          "id": "price-definition",
           "role": "understanding",
-          "content": "Explain transaction price as the consideration the company expects in exchange for transferring goods or services. Distinguish fixed consideration from variable consideration such as discounts, rebates, bonuses, and royalties. Explain that a significant financing component separates sales revenue from interest, non-cash consideration is generally measured at fair value, and payments to customers usually reduce revenue.",
+          "content": "Explain transaction price as the consideration the company expects in exchange for transferring goods or services. It is not simply the invoice price: fixed consideration is only the starting point. Introduce variable consideration next, the amounts that depend on discounts, rebates, performance bonuses, or royalties.",
           "must_say": [],
           "board": {
             "region": "live",
@@ -508,12 +745,47 @@
                 "payload": { "en": "transaction price", "ar": "سعر المعاملة" }
               },
               {
-                "id": "b-price-components-bullet",
+                "id": "b-price-fixed-bullet",
                 "kind": "bullet",
-                "anchor": "watch for variable consideration, financing, and non-cash or customer consideration",
-                "payload": {
-                  "text": "Variable consideration, financing, non-cash or customer payments"
-                }
+                "anchor": "fixed consideration is only the starting point",
+                "payload": { "text": "Fixed consideration is the starting point, not the total" }
+              },
+              {
+                "id": "b-price-variable-term",
+                "kind": "term",
+                "anchor": "variable consideration depends on discounts, rebates, bonuses, or royalties",
+                "payload": { "en": "variable consideration", "ar": "المقابل المتغير" }
+              }
+            ]
+          }
+        },
+        {
+          "id": "price-adjustments",
+          "role": "understanding",
+          "content": "Beyond the basic price, watch for three adjustments the exam likes to test. A significant financing component separates true sales revenue from interest income. Non-cash consideration, such as equity or goods received in exchange, is generally measured at fair value. Payments a company makes to its customer, like a rebate check, usually reduce the transaction price rather than count as a marketing expense.",
+          "must_say": [],
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-price-financing",
+                "kind": "bullet",
+                "anchor": "a significant financing component separates sales revenue from interest",
+                "payload": { "text": "Significant financing separates revenue from interest" }
+              },
+              {
+                "id": "b-price-noncash",
+                "kind": "bullet",
+                "anchor": "non-cash consideration is generally measured at fair value",
+                "payload": { "text": "Non-cash consideration measured at fair value" }
+              },
+              {
+                "id": "b-price-payments",
+                "kind": "bullet",
+                "anchor": "payments to customers usually reduce revenue",
+                "payload": { "text": "Payments to the customer usually reduce revenue" }
               }
             ]
           }
@@ -531,6 +803,12 @@
               "heading": "Estimating variable consideration"
             },
             "beats": [
+              {
+                "id": "b-price-two-methods",
+                "kind": "bullet",
+                "anchor": "two ways to estimate variable consideration",
+                "payload": { "text": "Two methods: expected value, or most likely amount" }
+              },
               {
                 "id": "b-price-estimation-compare",
                 "kind": "compare",
@@ -604,7 +882,26 @@
           }
         ],
         "reexplain_guide": "Describe expected value as averaging all outcomes using their probabilities, while most likely amount chooses the one outcome with the highest probability.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-price-options",
+              "kind": "options",
+              "anchor": "which estimation method fits a wide range of outcomes",
+              "payload": {
+                "stem": "Which estimation method fits a wide range of possible outcomes?",
+                "options": [
+                  { "id": "opt-expected-value", "text": "Probability-weighted expected value", "correct": true },
+                  { "id": "opt-always-likely", "text": "Always the single most likely outcome", "correct": false },
+                  { "id": "opt-ignore-variable", "text": "Fixed price only, ignore variable amounts", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Using the most likely amount for a wide range of possible outcomes instead of the probability-weighted expected value.",
       "remediation": [
@@ -639,7 +936,19 @@
           "rung": 1,
           "trigger": "ignoring_variable",
           "content": "Return to the definition: transaction price includes variable consideration such as discounts, rebates, bonuses, and royalties, not only the fixed amount on the invoice.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-variable-included",
+                "kind": "text",
+                "anchor": "transaction price includes variable consideration, not only the fixed amount",
+                "payload": { "text": "Transaction price includes variable consideration too" }
+              }
+            ]
+          }
         }
       ]
     },
@@ -657,13 +966,19 @@
         {
           "id": "allocate-worked",
           "role": "worked_example",
-          "content": "Explain allocation using relative standalone selling prices, and work one example fully. Standalone prices of 80 and 20 create an 80 percent and 20 percent split, so a transaction price of 90 is allocated as 72 and 18. Say every step out loud in order and leave the example visible as the model.",
+          "content": "Explain allocation using relative standalone selling prices, and work one example fully. Standalone prices of 80 and 20 add up to a total of 100. That ratio is eighty percent and twenty percent. A transaction price of 90 is split the same way: eighty percent of 90 is 72, and twenty percent of 90 is 18. Say every step out loud in order and leave the example visible as the model.",
           "must_say": [],
           "board": {
             "region": "pinned",
             "on_enter": "clear_live",
             "group": { "kind": "box", "heading": "Worked example" },
             "beats": [
+              {
+                "id": "b-worked-total",
+                "kind": "step",
+                "anchor": "standalone prices of 80 and 20 add up to a total of 100",
+                "payload": { "text": "Total standalone value: 80 + 20 = 100" }
+              },
               {
                 "id": "b-worked-ratio",
                 "kind": "equation",
@@ -674,10 +989,16 @@
                 }
               },
               {
-                "id": "b-worked-allocation",
+                "id": "b-worked-step-1",
                 "kind": "step",
-                "anchor": "apply the ratio to the ninety dollar transaction price",
-                "payload": { "text": "90 x 80% = 72, and 90 x 20% = 18" }
+                "anchor": "eighty percent of 90 is 72",
+                "payload": { "text": "90 × 80% = 72" }
+              },
+              {
+                "id": "b-worked-step-2",
+                "kind": "step",
+                "anchor": "twenty percent of 90 is 18",
+                "payload": { "text": "90 × 20% = 18" }
               }
             ]
           }
@@ -685,7 +1006,7 @@
         {
           "id": "allocate-estimation-methods",
           "role": "understanding",
-          "content": "An observable separate selling price is the best evidence. When prices are unavailable, explain the adjusted market assessment, expected cost plus margin, and residual approaches. Emphasize that allocation is needed only when a contract contains more than one performance obligation.",
+          "content": "An observable separate selling price is the best evidence and needs no estimate. When prices are unavailable, three approaches step in: adjusted market assessment asks what the market would pay, expected cost plus a margin builds the price up from cost, and the residual approach subtracts known prices from the bundle total. Allocation is needed only when a contract contains more than one performance obligation.",
           "must_say": [],
           "board": {
             "region": "live",
@@ -693,12 +1014,24 @@
             "group": null,
             "beats": [
               {
+                "id": "b-allocate-observable",
+                "kind": "bullet",
+                "anchor": "an observable separate selling price is the best evidence",
+                "payload": { "text": "Observable standalone price is the best evidence" }
+              },
+              {
                 "id": "b-allocate-estimation-methods",
                 "kind": "bullet",
                 "anchor": "when no observable price exists use adjusted market, cost-plus-margin, or the residual approach",
                 "payload": {
                   "text": "Adjusted market, cost-plus-margin, or residual approach"
                 }
+              },
+              {
+                "id": "b-allocate-when-needed",
+                "kind": "bullet",
+                "anchor": "allocation is needed only when a contract contains more than one performance obligation",
+                "payload": { "text": "Only needed with more than one obligation" }
               }
             ]
           }
@@ -706,13 +1039,19 @@
         {
           "id": "allocate-faded",
           "role": "faded_example",
-          "content": "Now run the same procedure with the final numbers hidden. Give a second bundle: standalone prices of 90 and 60, transaction price of 120. Ask the student to supply the ratio and the allocated amount for the higher-priced item, using the same method just demonstrated in the worked example, which stays visible as the model.",
+          "content": "Now run the same procedure with the final numbers hidden. Give a second bundle: standalone prices of 90 and 60, transaction price of 120. Ask the student to supply the ratio and the allocated amount for the higher-priced item, using the same three steps just demonstrated in the worked example, which stays visible as the model.",
           "must_say": [],
           "board": {
             "region": "live",
             "on_enter": "clear_live",
             "group": null,
             "beats": [
+              {
+                "id": "b-faded-reminder",
+                "kind": "bullet",
+                "anchor": "the same three steps just demonstrated in the worked example",
+                "payload": { "text": "Same three steps: total, ratio, apply" }
+              },
               {
                 "id": "b-faded-blanks",
                 "kind": "blanks",
@@ -758,7 +1097,26 @@
         "expected_answer": "150 SAR, because 150 over the total standalone value of 200 is seventy-five percent, and seventy-five percent of the 200 SAR transaction price is 150 SAR.",
         "options": [],
         "reexplain_guide": "Use a 100-dollar bundle containing items normally sold for 75 dollars and 25 dollars. Their relative values allocate 75 dollars and 25 dollars.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-allocate-problem-table",
+              "kind": "table",
+              "anchor": "the bundle sells for 200 SAR with two components priced at 150 and 50",
+              "payload": {
+                "variant": "plain",
+                "header": ["Component", "Standalone price"],
+                "rows": [
+                  ["Component 1", "150 SAR"],
+                  ["Component 2", "50 SAR"]
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Splitting the price evenly across obligations instead of by relative standalone selling price.",
       "remediation": [
@@ -784,6 +1142,12 @@
                 "kind": "text",
                 "anchor": "an even split ignores what each component is actually worth",
                 "payload": { "text": "Even split ignores standalone prices" }
+              },
+              {
+                "id": "b-rung-even-split-ratio",
+                "kind": "step",
+                "anchor": "150 over 200 is seventy-five percent, 50 over 200 is twenty-five percent",
+                "payload": { "text": "150/200 = 75%, 50/200 = 25%" }
               }
             ]
           }
@@ -806,7 +1170,7 @@
         {
           "id": "recognize-control",
           "role": "understanding",
-          "content": "Center the explanation on transfer of control. Satisfying the performance obligation triggers recognition, not merely signing or billing. Return to Airbus: delivery transfers control and triggers recognition of the 100 million euros.",
+          "content": "Center the explanation on transfer of control. Satisfying the performance obligation triggers recognition, not merely signing the contract or sending an invoice. Return to Airbus: the contract signed in March creates no revenue by itself. Delivery in June transfers control and triggers recognition of the full 100 million euros.",
           "must_say": [],
           "board": {
             "region": "live",
@@ -821,6 +1185,21 @@
                   "en": "transfer of control",
                   "ar": "انتقال السيطرة"
                 }
+              },
+              {
+                "id": "b-recognize-not-signing",
+                "kind": "text",
+                "anchor": "not merely signing the contract or sending an invoice",
+                "payload": { "text": "Signing or billing does not trigger recognition" }
+              },
+              {
+                "id": "b-recognize-airbus-example",
+                "kind": "callout",
+                "anchor": "delivery in June transfers control and triggers recognition",
+                "payload": {
+                  "kind": "example",
+                  "text": "Airbus: revenue recognized in June at delivery, not March at signing"
+                }
               }
             ]
           }
@@ -828,7 +1207,7 @@
         {
           "id": "recognize-timing-contrast",
           "role": "comparison",
-          "content": "For point-in-time recognition, discuss indicators such as rights to payment, legal title, physical possession, risks and rewards, and customer acceptance. For over-time recognition, explain that revenue follows progress as control transfers continuously, using measures such as cost-to-cost and units delivered. Do not add rules absent from the course material.",
+          "content": "For point-in-time recognition, discuss indicators such as rights to payment, legal title, physical possession, risks and rewards, and customer acceptance. For over-time recognition, explain that revenue follows progress as control transfers continuously, using measures such as cost-to-cost and units delivered. Match the pattern to how control actually transfers.",
           "must_say": [],
           "board": {
             "region": "live",
@@ -838,6 +1217,12 @@
               "heading": "Point in time vs over time"
             },
             "beats": [
+              {
+                "id": "b-recognize-two-patterns",
+                "kind": "bullet",
+                "anchor": "two recognition patterns, point in time or over time",
+                "payload": { "text": "Two patterns: point in time, or over time" }
+              },
               {
                 "id": "b-recognize-timing-compare",
                 "kind": "compare",
@@ -858,6 +1243,12 @@
                     }
                   ]
                 }
+              },
+              {
+                "id": "b-recognize-match-pattern",
+                "kind": "bullet",
+                "anchor": "match the pattern to how control actually transfers",
+                "payload": { "text": "Match the pattern to how control actually transfers" }
               }
             ]
           }
@@ -911,7 +1302,26 @@
           }
         ],
         "reexplain_guide": "Contrast signing an order today with delivering the product next month. The contract begins the arrangement, but revenue is recognized when the customer obtains control.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-recognize-options",
+              "kind": "options",
+              "anchor": "when should Airbus recognize the revenue",
+              "payload": {
+                "stem": "When should Airbus recognize the revenue?",
+                "options": [
+                  { "id": "opt-june-delivery", "text": "June, at delivery, when control transfers", "correct": true },
+                  { "id": "opt-march-signing", "text": "March, at signing", "correct": false },
+                  { "id": "opt-invoice-date", "text": "Whenever invoiced", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Recognizing revenue at contract signing or invoicing instead of when control actually transfers.",
       "remediation": [
@@ -946,7 +1356,19 @@
           "rung": 1,
           "trigger": "billing_triggers_recognition",
           "content": "Point out that an invoice is a request for payment, not evidence that control transferred. Ask what physically or legally changed hands.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-invoice-not-control",
+                "kind": "text",
+                "anchor": "an invoice is a request for payment, not evidence that control transferred",
+                "payload": { "text": "An invoice requests payment; it does not prove control transferred" }
+              }
+            ]
+          }
         }
       ]
     },
@@ -969,6 +1391,21 @@
             "on_enter": "clear_live",
             "group": null,
             "beats": [
+              {
+                "id": "b-summary-chain",
+                "kind": "chain",
+                "anchor": "the five steps as one decision chain, one more time",
+                "payload": {
+                  "links": [
+                    "Identify the contract",
+                    "Identify performance obligations",
+                    "Determine the transaction price",
+                    "Allocate the transaction price",
+                    "Recognize revenue"
+                  ],
+                  "break_at": null
+                }
+              },
               {
                 "id": "b-summary-unit",
                 "kind": "bullet",
@@ -999,9 +1436,39 @@
         {
           "id": "summary-airbus-recap",
           "role": "recap",
-          "content": "Apply the whole chain to Airbus: qualifying contract, airplane-delivery obligation, 100 million euro transaction price, full allocation to that obligation, and recognition on delivery. Stress that this sequence prevents recognition before the company has identified, measured, and satisfied its promise.",
+          "content": "Apply the whole chain to Airbus one more time, stage by stage. Steps one and two together give a qualifying contract with Cathay Pacific and one performance obligation to deliver the airplanes. Step three fixes the transaction price at 100 million euros. Step four allocates the full amount to that single obligation, since there is only one promise. Step five recognizes revenue only once delivery transfers control, in June. Stress that skipping any stage breaks the chain and costs the mark.",
           "must_say": [],
-          "board": null
+          "board": {
+            "region": "live",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-summary-step-contract-obligation",
+                "kind": "step",
+                "anchor": "a qualifying contract with Cathay Pacific and one performance obligation to deliver the airplanes",
+                "payload": { "text": "Contract with Cathay Pacific; obligation to deliver" }
+              },
+              {
+                "id": "b-summary-step-price",
+                "kind": "step",
+                "anchor": "step three fixes the transaction price at 100 million euros",
+                "payload": { "text": "Price: €100 million" }
+              },
+              {
+                "id": "b-summary-step-allocation",
+                "kind": "step",
+                "anchor": "step four allocates the full amount to that single obligation",
+                "payload": { "text": "Allocation: full amount, one obligation" }
+              },
+              {
+                "id": "b-summary-step-recognition",
+                "kind": "step",
+                "anchor": "step five recognizes revenue only once delivery transfers control, in June",
+                "payload": { "text": "Recognition: at delivery, in June" }
+              }
+            ]
+          }
         },
         {
           "id": "summary-warning",
@@ -1058,7 +1525,27 @@
           }
         ],
         "reexplain_guide": "Return to the final step: the contract, obligations, price, and allocation prepare the accounting, but revenue is recorded only when the related promise is fulfilled and control transfers.",
-        "board": null
+        "board": {
+          "region": "live",
+          "on_enter": "clear_live",
+          "group": null,
+          "beats": [
+            {
+              "id": "b-summary-options",
+              "kind": "options",
+              "anchor": "when should a company recognize revenue allocated to an obligation",
+              "payload": {
+                "stem": "When should a company recognize revenue allocated to an obligation?",
+                "options": [
+                  { "id": "opt-contract-discussed", "text": "When the contract is first discussed", "correct": false },
+                  { "id": "opt-invoice-sent", "text": "When the company sends an invoice", "correct": false },
+                  { "id": "opt-obligation-satisfied", "text": "When the obligation is satisfied, control transfers", "correct": true },
+                  { "id": "opt-price-estimated", "text": "When the transaction price is estimated", "correct": false }
+                ]
+              }
+            }
+          ]
+        }
       },
       "loses_marks": "Answering with any step before the fifth. Recognition depends on satisfaction, not on which step the question mentions.",
       "remediation": [
@@ -1074,14 +1561,38 @@
           "rung": 1,
           "trigger": "discussion_triggers_recognition",
           "content": "Point out that a discussion has not even cleared step one, the qualifying contract, let alone the final step.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-discussion-not-contract",
+                "kind": "text",
+                "anchor": "a discussion has not even cleared step one, the qualifying contract",
+                "payload": { "text": "A discussion has not even cleared step one" }
+              }
+            ]
+          }
         },
         {
           "id": "rung-summary-billing",
           "rung": 1,
           "trigger": "billing_triggers_recognition",
           "content": "Point out that an invoice is a billing event, not evidence that control transferred.",
-          "board": null
+          "board": {
+            "region": "temporary",
+            "on_enter": "keep",
+            "group": null,
+            "beats": [
+              {
+                "id": "b-rung-billing-event",
+                "kind": "text",
+                "anchor": "an invoice is a billing event, not evidence that control transferred",
+                "payload": { "text": "Billing is not evidence of transferred control" }
+              }
+            ]
+          }
         },
         {
           "id": "rung-summary-price",
